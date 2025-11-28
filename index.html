@@ -218,26 +218,26 @@ function desenharCardBase(canvas, data, theme) {
         ctx.drawImage(logoImg, 80, 120, 230, 230);
     }
 
-    // Texto KRONOS.AG
+    // Texto KRONOS.AG (tamanho e posição ajustados)
     ctx.fillStyle = textMain;
-    ctx.font = "bold 70px Arial";
-    ctx.fillText("KRONOS.AG", 340, 205);
+    ctx.font = "bold 64px Arial";
+    ctx.fillText("KRONOS.AG", 340, 200);
 
     // Texto institucional
-    ctx.font = "34px Arial";
-    ctx.fillText("Gestão e curadoria estratégica", 340, 255);
-    ctx.fillText("sob medida para o agronegócio", 340, 295);
+    ctx.font = "32px Arial";
+    ctx.fillText("Gestão e curadoria estratégica", 340, 245);
+    ctx.fillText("sob medida para o agronegócio", 340, 280);
 
-    // Data + COTAÇÕES
+    // Data + COTAÇÕES (mais enxuto, não cruza com KRONOS.AG)
     const hoje = new Date();
     const dataStr = hoje.toLocaleDateString("pt-BR");
 
     ctx.textAlign = "right";
-    ctx.font = "bold 56px Arial";
-    ctx.fillText("COTAÇÕES", W - 80, 195);
+    ctx.font = "bold 46px Arial";
+    ctx.fillText("COTAÇÕES", W - 70, 200);
 
-    ctx.font = "34px Arial";
-    ctx.fillText(dataStr, W - 80, 235);
+    ctx.font = "30px Arial";
+    ctx.fillText(dataStr, W - 70, 235);
     ctx.textAlign = "left";
 
     // CARDS -------------------------------------------------
