@@ -103,7 +103,7 @@ async function atualizar() {
     gerarCard(data);
 }
 
-// Helpers de desenho no canvas
+// Helper opcional (ainda deixei aqui se a gente quiser usar depois)
 function drawMultilineText(ctx, text, x, y, maxWidth, lineHeight) {
     const words = text.split(' ');
     let line = '';
@@ -178,15 +178,10 @@ function gerarCard(data) {
     ctx.font = "bold 64px Arial";
     ctx.fillText("KRONOS.AG", 340, 190);
 
+    // Duas linhas fixas do institucional
     ctx.font = "28px Arial";
-    drawMultilineText(
-        ctx,
-        "Gestão e curadoria estratégica\nsob medida para o agronegócio",
-        340,
-        230,
-        550,
-        34
-    );
+    ctx.fillText("Gestão e curadoria estratégica", 340, 240);
+    ctx.fillText("sob medida para o agronegócio", 340, 275);
 
     // Bloco "COTAÇÕES" à direita
     const hoje = new Date();
@@ -275,4 +270,3 @@ function baixarCard(tipo) {
 
 </body>
 </html>
-
