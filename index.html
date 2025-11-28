@@ -30,6 +30,7 @@
         canvas {
             margin-top: 25px;
             border-radius: 10px;
+            border: 1px solid #222;
         }
     </style>
 </head>
@@ -44,19 +45,19 @@
 
 <h2 style="margin-top:30px;">📱 Card Instagram</h2>
 <button class="btn" onclick="baixarCard('preto')">Baixar Fundo Preto</button>
-<button class="btn" onclick="baixarCard('branco')">Baixar Fundo Branco</button>
 
 <br><br>
 <canvas id="card" width="1080" height="1920"></canvas>
 
 <script>
-// Pré-carrega a logo. Coloque o arquivo da logo na mesma pasta deste HTML
-// com o nome exato: logo-kronos.png
+// Pré-carrega a logo (arquivo precisa se chamar logo-kronos.png
+// e estar na mesma pasta do index.html)
 const logoImg = new Image();
 logoImg.src = 'logo-kronos.png';
 let logoCarregada = false;
 logoImg.onload = () => { logoCarregada = true; };
 
+// Busca dados da function no Netlify
 async function fetchRealQuotes() {
   try {
     const resp = await fetch('/.netlify/functions/cepea-quotes');
@@ -102,51 +103,176 @@ async function atualizar() {
     gerarCard(data);
 }
 
+// Helpers de desenho no canvas
+function drawMultilineText(ctx, text, x, y, maxWidth, lineHeight) {
+    const words = text.split(' ');
+    let line = '';
+    for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        const testWidth = metrics.width;
+        if (testWidth > maxWidth && n > 0) {
+            ctx.fillText(line, x, y);
+            line = words[n] + ' ';
+            y += lineHeight;
+        } else {
+            line = testLine;
+        }
+    }
+    ctx.fillText(line, x, y);
+}
+
+function formatPriceBR(value) {
+    return value.toFixed(2).replace('.', ',');
+}
+
 function gerarCard(data) {
     const ordem = ['soja','milho','boi','algodao','cafe','dolar'];
+    const labels = {
+        soja: 'SOJA',
+        milho: 'MILHO',
+        boi: 'BOI GORDO',
+        algodao: 'ALGODÃO',
+        cafe: 'CAFÉ ARÁBICA',
+        dolar: 'DÓLAR'
+    };
+    const icons = {
+        soja: '🌱',
+        milho: '🌽',
+        boi: '🐂',
+        algodao: '⚪',
+        cafe: '☕',
+        dolar: '💵'
+    };
+    const stripeColors = {
+        soja: '#e74c3c',
+        milho: '#27ae60',
+        boi: '#27ae60',
+        algodao: '#e67e22',
+        cafe: '#9b59b6',
+        dolar: '#2980b9'
+    };
+
     const canvas = document.getElementById("card");
     const ctx = canvas.getContext("2d");
 
-    // Fundo
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(0,0,1080,1920);
+    const W = canvas.width;
+    const H = canvas.height;
 
-    // Logo no topo
+    // Fundo geral
+    ctx.fillStyle = "#050607";
+    ctx.fillRect(0, 0, W, H);
+
+    // HEADER -------------------------------------------------
+    // Logo
     if (logoCarregada) {
-        const logoWidth = 260;
-        const logoHeight = 260;
-        const logoX = (1080 - logoWidth) / 2;
+        const logoWidth = 220;
+        const logoHeight = 220;
+        const logoX = 80;
         const logoY = 120;
         ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
     }
 
-    // Título abaixo da logo
+    // Texto à direita da logo
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 60px Arial";
-    const titulo = "COTAÇÕES KRONOS.AG";
-    const tituloWidth = ctx.measureText(titulo).width;
-    ctx.fillText(titulo, (1080 - tituloWidth) / 2, 450);
+    ctx.font = "bold 64px Arial";
+    ctx.fillText("KRONOS.AG", 340, 190);
 
-    ctx.font = "48px Arial";
+    ctx.font = "28px Arial";
+    drawMultilineText(
+        ctx,
+        "Gestão e curadoria estratégica\nsob medida para o agronegócio",
+        340,
+        230,
+        550,
+        34
+    );
 
-    let y = 550;
+    // Bloco "COTAÇÕES" à direita
+    const hoje = new Date();
+    const dia = String(hoje.getDate()).padStart(2,'0');
+    const mes = String(hoje.getMonth()+1).padStart(2,'0');
+    const ano = hoje.getFullYear();
+    const dataStr = `${dia}/${mes}/${ano}`;
 
-    ordem.forEach(key => {
+    ctx.textAlign = "right";
+    ctx.font = "bold 42px Arial";
+    ctx.fillText("COTAÇÕES", W - 80, 180);
+    ctx.font = "26px Arial";
+    ctx.fillText(dataStr, W - 80, 220);
+    ctx.textAlign = "left";
+
+    // CARDS DE CADA ATIVO ------------------------------------
+    let startY = 360;
+    const cardHeight = 220;
+    const cardMargin = 18;
+    const cardLeft = 70;
+    const cardRight = W - 70;
+
+    ordem.forEach((key, index) => {
         const c = data[key];
-        const linha = `${key.toUpperCase()}: R$ ${c.price.toFixed(2)} (${c.variation}%)`;
-        ctx.fillText(linha, 80, y);
-        y += 110;
+        const top = startY + index * (cardHeight + cardMargin);
+        const bottom = top + cardHeight;
+
+        // Fundo do card
+        ctx.fillStyle = "#131516";
+        ctx.fillRect(cardLeft, top, cardRight - cardLeft, cardHeight);
+
+        // Faixa colorida à esquerda
+        ctx.fillStyle = stripeColors[key] || "#5C8B4F";
+        ctx.fillRect(cardLeft, top, 10, cardHeight);
+
+        // Ícone + nome + fonte
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "42px Arial";
+        const label = labels[key];
+        const icon = icons[key] || "";
+        ctx.fillText(`${icon}  ${label}`, cardLeft + 40, top + 70);
+
+        ctx.font = "24px Arial";
+        ctx.fillText(`Fonte: ${c.source}`, cardLeft + 40, top + 110);
+
+        // Preço + unidade + variação do lado direito
+        const priceText = `R$ ${formatPriceBR(c.price)}`;
+        const unitText = `/ ${c.unit}`;
+
+        ctx.textAlign = "right";
+        ctx.font = "bold 46px Arial";
+        ctx.fillText(priceText, cardRight - 40, top + 80);
+
+        ctx.font = "26px Arial";
+        ctx.fillText(unitText, cardRight - 40, top + 115);
+
+        // Variação com seta e cor
+        const arrow = c.variation >= 0 ? "▲" : "▼";
+        const varColor = c.variation >= 0 ? "#2ecc71" : "#e74c3c";
+        const varText = `${arrow} ${c.variation.toFixed(2)}%`;
+
+        ctx.fillStyle = varColor;
+        ctx.font = "28px Arial";
+        ctx.fillText(varText, cardRight - 40, bottom - 30);
+
+        ctx.textAlign = "left";
     });
+
+    // RODAPÉ -------------------------------------------------
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "32px Arial";
+    const footer = "kronos-ag.com";
+    const footerWidth = ctx.measureText(footer).width;
+    ctx.fillText(footer, (W - footerWidth) / 2, H - 60);
 }
 
+// Download do card
 function baixarCard(tipo) {
     const canvas = document.getElementById("card");
     const link = document.createElement("a");
     link.download = `kronos-card-${tipo}.png`;
-    link.href = canvas.toDataURL();
+    link.href = canvas.toDataURL("image/png");
     link.click();
 }
 </script>
 
 </body>
 </html>
+
