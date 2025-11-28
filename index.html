@@ -6,11 +6,14 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #0B0C10;
+            background-color: #0B0F11; /* preto um pouco mais claro */
             color: white;
             padding: 20px;
         }
-        h1 { color: #5C8B4F; margin-bottom: 10px; }
+        h1 {
+            color: #5C8B4F;
+            margin-bottom: 10px;
+        }
         .btn {
             padding: 10px 20px;
             background: #5C8B4F;
@@ -22,7 +25,7 @@
             font-size: 16px;
         }
         .commodity {
-            background: #1a1a1a;
+            background: #14181B;
             padding: 10px;
             margin: 8px 0;
             border-radius: 5px;
@@ -31,6 +34,7 @@
             margin-top: 25px;
             border-radius: 10px;
             border: 1px solid #222;
+            display: block;
         }
     </style>
 </head>
@@ -103,7 +107,7 @@ async function atualizar() {
     gerarCard(data);
 }
 
-// Helper opcional (ainda deixei aqui se a gente quiser usar depois)
+// Helper opcional
 function drawMultilineText(ctx, text, x, y, maxWidth, lineHeight) {
     const words = text.split(' ');
     let line = '';
@@ -159,15 +163,15 @@ function gerarCard(data) {
     const W = canvas.width;
     const H = canvas.height;
 
-    // Fundo geral
-    ctx.fillStyle = "#050607";
+    // Fundo geral (um pouco mais claro)
+    ctx.fillStyle = "#0B0F11";
     ctx.fillRect(0, 0, W, H);
 
     // HEADER -------------------------------------------------
     // Logo
     if (logoCarregada) {
-        const logoWidth = 220;
-        const logoHeight = 220;
+        const logoWidth = 230;
+        const logoHeight = 230;
         const logoX = 80;
         const logoY = 120;
         ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
@@ -175,13 +179,13 @@ function gerarCard(data) {
 
     // Texto à direita da logo
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 64px Arial";
-    ctx.fillText("KRONOS.AG", 340, 190);
+    ctx.font = "bold 80px Arial";
+    ctx.fillText("KRONOS.AG", 340, 195);
 
-    // Duas linhas fixas do institucional
-    ctx.font = "28px Arial";
-    ctx.fillText("Gestão e curadoria estratégica", 340, 240);
-    ctx.fillText("sob medida para o agronegócio", 340, 275);
+    // Duas linhas fixas do institucional (maior)
+    ctx.font = "34px Arial";
+    ctx.fillText("Gestão e curadoria estratégica", 340, 245);
+    ctx.fillText("sob medida para o agronegócio", 340, 285);
 
     // Bloco "COTAÇÕES" à direita
     const hoje = new Date();
@@ -191,15 +195,15 @@ function gerarCard(data) {
     const dataStr = `${dia}/${mes}/${ano}`;
 
     ctx.textAlign = "right";
-    ctx.font = "bold 42px Arial";
-    ctx.fillText("COTAÇÕES", W - 80, 180);
-    ctx.font = "26px Arial";
-    ctx.fillText(dataStr, W - 80, 220);
+    ctx.font = "bold 56px Arial";
+    ctx.fillText("COTAÇÕES", W - 80, 185);
+    ctx.font = "34px Arial";
+    ctx.fillText(dataStr, W - 80, 225);
     ctx.textAlign = "left";
 
     // CARDS DE CADA ATIVO ------------------------------------
     let startY = 360;
-    const cardHeight = 220;
+    const cardHeight = 225;
     const cardMargin = 18;
     const cardLeft = 70;
     const cardRight = W - 70;
@@ -209,34 +213,34 @@ function gerarCard(data) {
         const top = startY + index * (cardHeight + cardMargin);
         const bottom = top + cardHeight;
 
-        // Fundo do card
-        ctx.fillStyle = "#131516";
+        // Fundo do card (mais claro)
+        ctx.fillStyle = "#1B2024";
         ctx.fillRect(cardLeft, top, cardRight - cardLeft, cardHeight);
 
         // Faixa colorida à esquerda
         ctx.fillStyle = stripeColors[key] || "#5C8B4F";
         ctx.fillRect(cardLeft, top, 10, cardHeight);
 
-        // Ícone + nome + fonte
+        // Ícone + nome + fonte (maiores)
         ctx.fillStyle = "#FFFFFF";
-        ctx.font = "42px Arial";
+        ctx.font = "52px Arial";
         const label = labels[key];
         const icon = icons[key] || "";
-        ctx.fillText(`${icon}  ${label}`, cardLeft + 40, top + 70);
+        ctx.fillText(`${icon}  ${label}`, cardLeft + 40, top + 80);
 
-        ctx.font = "24px Arial";
-        ctx.fillText(`Fonte: ${c.source}`, cardLeft + 40, top + 110);
+        ctx.font = "30px Arial";
+        ctx.fillText(`Fonte: ${c.source}`, cardLeft + 40, top + 120);
 
-        // Preço + unidade + variação do lado direito
+        // Preço + unidade + variação do lado direito (maiores)
         const priceText = `R$ ${formatPriceBR(c.price)}`;
         const unitText = `/ ${c.unit}`;
 
         ctx.textAlign = "right";
-        ctx.font = "bold 46px Arial";
-        ctx.fillText(priceText, cardRight - 40, top + 80);
+        ctx.font = "bold 60px Arial";
+        ctx.fillText(priceText, cardRight - 40, top + 85);
 
-        ctx.font = "26px Arial";
-        ctx.fillText(unitText, cardRight - 40, top + 115);
+        ctx.font = "34px Arial";
+        ctx.fillText(unitText, cardRight - 40, top + 125);
 
         // Variação com seta e cor
         const arrow = c.variation >= 0 ? "▲" : "▼";
@@ -244,18 +248,18 @@ function gerarCard(data) {
         const varText = `${arrow} ${c.variation.toFixed(2)}%`;
 
         ctx.fillStyle = varColor;
-        ctx.font = "28px Arial";
-        ctx.fillText(varText, cardRight - 40, bottom - 30);
+        ctx.font = "34px Arial";
+        ctx.fillText(varText, cardRight - 40, bottom - 35);
 
         ctx.textAlign = "left";
     });
 
     // RODAPÉ -------------------------------------------------
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "32px Arial";
+    ctx.font = "34px Arial";
     const footer = "kronos-ag.com";
     const footerWidth = ctx.measureText(footer).width;
-    ctx.fillText(footer, (W - footerWidth) / 2, H - 60);
+    ctx.fillText(footer, (W - footerWidth) / 2, H - 55);
 }
 
 // Download do card
