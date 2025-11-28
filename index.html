@@ -20,7 +20,7 @@
             color: white;
             border: none;
             cursor: pointer;
-            margin: 10px 0;
+            margin: 10px 10px 10px 0;
             border-radius: 5px;
             font-size: 16px;
         }
@@ -61,6 +61,9 @@ logoImg.src = 'logo-kronos.png';
 let logoCarregada = false;
 logoImg.onload = () => { logoCarregada = true; };
 
+// Guarda o último conjunto de dados para gerar o card branco
+let lastData = null;
+
 // Busca dados reais
 async function fetchRealQuotes() {
   try {
@@ -83,6 +86,8 @@ async function fetchRealQuotes() {
 
 async function atualizar() {
     const data = await fetchRealQuotes();
+    lastData = data; // guarda para o card branco depois
+
     const ordem = ['soja','milho','boi','algodao','cafe','dolar'];
     let html = "";
 
@@ -100,14 +105,17 @@ async function atualizar() {
     });
 
     document.getElementById("lista").innerHTML = html;
-    gerarCard(data);
+    gerarCardPreto(data);
 }
 
 function formatPriceBR(value) {
     return value.toFixed(2).replace('.', ',');
 }
 
-function gerarCard(data) {
+/* ------------------------------------------------------------------
+   CARD PRETO (visível no canvas principal)
+-------------------------------------------------------------------*/
+function gerarCardPreto(data) {
     const ordem = ['soja','milho','boi','algodao','cafe','dolar'];
     const labels = {
         soja: 'SOJA',
@@ -135,42 +143,101 @@ function gerarCard(data) {
     };
 
     const canvas = document.getElementById("card");
-    const ctx = canvas.getContext("2d");
+    desenharCardBase(canvas, data, {
+        bgColor: "#0B0F11",
+        cardColor: "#1B2024",
+        textMain: "#FFFFFF",
+        textSecondary: "#FFFFFF",
+        stripeColors,
+        labels,
+        icons
+    });
+}
 
+/* ------------------------------------------------------------------
+   CARD BRANCO (gerado só para download em PNG)
+-------------------------------------------------------------------*/
+function gerarCardBranco(data, canvas) {
+    const ordem = ['soja','milho','boi','algodao','cafe','dolar'];
+    const labels = {
+        soja: 'SOJA',
+        milho: 'MILHO',
+        boi: 'BOI GORDO',
+        algodao: 'ALGODÃO',
+        cafe: 'CAFÉ ARÁBICA',
+        dolar: 'DÓLAR'
+    };
+    const icons = {
+        soja: '🌱',
+        milho: '🌽',
+        boi: '🐂',
+        algodao: '⚪',
+        cafe: '☕',
+        dolar: '💵'
+    };
+    const stripeColors = {
+        soja: '#e74c3c',
+        milho: '#27ae60',
+        boi: '#27ae60',
+        algodao: '#e67e22',
+        cafe: '#9b59b6',
+        dolar: '#2980b9'
+    };
+
+    desenharCardBase(canvas, data, {
+        bgColor: "#FFFFFF",
+        cardColor: "#F3F4F6",
+        textMain: "#000000",
+        textSecondary: "#000000",
+        stripeColors,
+        labels,
+        icons
+    });
+}
+
+/* ------------------------------------------------------------------
+   FUNÇÃO GENÉRICA QUE DESENHA O CARD (preto ou branco)
+-------------------------------------------------------------------*/
+function desenharCardBase(canvas, data, theme) {
+    const { bgColor, cardColor, textMain, textSecondary,
+            stripeColors, labels, icons } = theme;
+
+    const ordem = ['soja','milho','boi','algodao','cafe','dolar'];
+
+    const ctx = canvas.getContext("2d");
     const W = canvas.width;
     const H = canvas.height;
 
     // Fundo geral
-    ctx.fillStyle = "#0B0F11";
+    ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, W, H);
 
     // HEADER -------------------------------------------------
-
     // Logo
     if (logoCarregada) {
         ctx.drawImage(logoImg, 80, 120, 230, 230);
     }
 
-    // TÍTULO AJUSTADO
-    ctx.fillStyle = "#FFFFFF";
+    // Texto KRONOS.AG
+    ctx.fillStyle = textMain;
     ctx.font = "bold 70px Arial";
-    ctx.fillText("KRONOS.AG", 340, 185);
+    ctx.fillText("KRONOS.AG", 340, 205);
 
     // Texto institucional
     ctx.font = "34px Arial";
-    ctx.fillText("Gestão e curadoria estratégica", 340, 235);
-    ctx.fillText("sob medida para o agronegócio", 340, 275);
+    ctx.fillText("Gestão e curadoria estratégica", 340, 255);
+    ctx.fillText("sob medida para o agronegócio", 340, 295);
 
-    // DATA + COTAÇÕES
+    // Data + COTAÇÕES
     const hoje = new Date();
     const dataStr = hoje.toLocaleDateString("pt-BR");
 
     ctx.textAlign = "right";
     ctx.font = "bold 56px Arial";
-    ctx.fillText("COTAÇÕES", W - 80, 185);
+    ctx.fillText("COTAÇÕES", W - 80, 195);
 
     ctx.font = "34px Arial";
-    ctx.fillText(dataStr, W - 80, 225);
+    ctx.fillText(dataStr, W - 80, 235);
     ctx.textAlign = "left";
 
     // CARDS -------------------------------------------------
@@ -186,7 +253,7 @@ function gerarCard(data) {
         const bottom = top + cardHeight;
 
         // Fundo card
-        ctx.fillStyle = "#1B2024";
+        ctx.fillStyle = cardColor;
         ctx.fillRect(cardLeft, top, cardRight - cardLeft, cardHeight);
 
         // Faixa colorida
@@ -194,25 +261,25 @@ function gerarCard(data) {
         ctx.fillRect(cardLeft, top, 10, cardHeight);
 
         // Nome + fonte
-        ctx.fillStyle = "#FFFFFF";
+        ctx.fillStyle = textMain;
         ctx.font = "52px Arial";
         ctx.fillText(`${icons[key]}  ${labels[key]}`, cardLeft + 40, top + 80);
 
         ctx.font = "30px Arial";
         ctx.fillText(`Fonte: ${c.source}`, cardLeft + 40, top + 120);
 
-        // Preço
+        // Preço + unidade
         ctx.textAlign = "right";
         ctx.font = "bold 60px Arial";
         ctx.fillText(`R$ ${formatPriceBR(c.price)}`, cardRight - 40, top + 85);
 
         ctx.font = "34px Arial";
+        ctx.fillStyle = textSecondary;
         ctx.fillText(`/ ${c.unit}`, cardRight - 40, top + 125);
 
         // Variação
         const arrow = c.variation >= 0 ? "▲" : "▼";
         const varColor = c.variation >= 0 ? "#2ecc71" : "#e74c3c";
-
         ctx.fillStyle = varColor;
         ctx.font = "34px Arial";
         ctx.fillText(`${arrow} ${c.variation.toFixed(2)}%`, cardRight - 40, bottom - 35);
@@ -221,29 +288,31 @@ function gerarCard(data) {
     });
 
     // Rodapé
-    ctx.fillStyle = "#FFFFFF";
+    ctx.fillStyle = textMain;
     ctx.font = "34px Arial";
     const footer = "kronos-ag.com";
     const fw = ctx.measureText(footer).width;
     ctx.fillText(footer, (W - fw) / 2, H - 55);
 }
 
-// DOWNLOAD DO CARD
+/* ------------------------------------------------------------------
+   DOWNLOAD DO CARD
+-------------------------------------------------------------------*/
 function baixarCard(tipo) {
     const originalCanvas = document.getElementById("card");
 
-    // FUNDO BRANCO
+    // FUNDO BRANCO → gera um novo card em outro canvas
     if (tipo === "branco") {
+        if (!lastData) {
+            alert("Clique primeiro em 'Atualizar Cotações' para gerar os dados.");
+            return;
+        }
+
         const temp = document.createElement("canvas");
         temp.width = originalCanvas.width;
         temp.height = originalCanvas.height;
 
-        const ctx2 = temp.getContext("2d");
-
-        ctx2.fillStyle = "#FFFFFF";
-        ctx2.fillRect(0, 0, temp.width, temp.height);
-
-        ctx2.drawImage(originalCanvas, 0, 0);
+        gerarCardBranco(lastData, temp);
 
         const link = document.createElement("a");
         link.download = "kronos-card-branco.png";
@@ -252,9 +321,9 @@ function baixarCard(tipo) {
         return;
     }
 
-    // FUNDO PRETO
+    // FUNDO PRETO → usa o canvas visível
     const link = document.createElement("a");
-    link.download = `kronos-card-${tipo}.png`;
+    link.download = "kronos-card-preto.png";
     link.href = originalCanvas.toDataURL("image/png");
     link.click();
 }
