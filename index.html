@@ -6,7 +6,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #0B0F11; /* preto um pouco mais claro */
+            background-color: #0B0F11;
             color: white;
             padding: 20px;
         }
@@ -160,7 +160,7 @@ function gerarCardBranco(data, canvas) {
 }
 
 /* --------------------------------------------
-   DESENHO DO CARD (GENÉRICO)
+   DESENHO DO CARD
 --------------------------------------------- */
 function desenharCardBase(canvas, data, theme) {
     const { bgColor, cardColor, textMain, textSecondary,
@@ -175,21 +175,17 @@ function desenharCardBase(canvas, data, theme) {
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, W, H);
 
-    // LOGO -------------------------------------------------
     if (logoCarregada)
         ctx.drawImage(logoImg, 80, 120, 230, 230);
 
-    // KRONOS.AG
     ctx.fillStyle = textMain;
     ctx.font = "bold 64px Arial";
     ctx.fillText("KRONOS.AG", 340, 200);
 
-    // SUBTÍTULO
     ctx.font = "32px Arial";
     ctx.fillText("Gestão e curadoria estratégica", 340, 245);
     ctx.fillText("sob medida para o agronegócio", 340, 280);
 
-    // **DATA (SEM A PALAVRA COTAÇÕES)**
     const hoje = new Date();
     const dataStr = hoje.toLocaleDateString("pt-BR");
 
@@ -198,7 +194,6 @@ function desenharCardBase(canvas, data, theme) {
     ctx.fillText(dataStr, W - 70, 200);
     ctx.textAlign = "left";
 
-    // CARDS -------------------------------------------------
     let startY = 360;
     const cardHeight = 225;
     const cardMargin = 18;
@@ -230,16 +225,18 @@ function desenharCardBase(canvas, data, theme) {
         ctx.font = "34px Arial";
         ctx.fillText(`/ ${c.unit}`, cardRight - 40, top + 125);
 
+        // -------------------------------
+        // 🔥 AQUI ESTÁ O AJUSTE DO TAMANHO
+        // -------------------------------
         const arrow = c.variation >= 0 ? "▲" : "▼";
         const varColor = c.variation >= 0 ? "#2ecc71" : "#e74c3c";
         ctx.fillStyle = varColor;
-        ctx.font = "34px Arial";
+        ctx.font = "38px Arial"; /* AUMENTADO */
         ctx.fillText(`${arrow} ${c.variation.toFixed(2)}%`, cardRight - 40, bottom - 35);
 
         ctx.textAlign = "left";
     });
 
-    // RODAPÉ
     ctx.fillStyle = textMain;
     ctx.font = "34px Arial";
     const footer = "kronos-ag.com";
