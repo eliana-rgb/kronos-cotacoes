@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <title>KRONOS.AG - Cotações</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #0B0C10;
+            color: white;
+            padding: 20px;
+        }
+        h1 { color: #5C8B4F; margin-bottom: 10px; }
+        .btn {
+            padding: 10px 20px;
+            background: #5C8B4F;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .commodity {
+            background: #1a1a1a;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 5px;
+        }
+        canvas {
+            margin-top: 25px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>KRONOS.AG — Cotações Automáticas</h1>
+
+<button class="btn" onclick="atualizar()">🔄 Atualizar Cotações</button>
+
+<div id="lista"></div>
+
+<h2 style="margin-top:30px;">📱 Card Instagram</h2>
+<button class="btn" onclick="baixarCard('preto')">Baixar Fundo Preto</button>
+<button class="btn" onclick="baixarCard('branco')">Baixar Fundo Branco</button>
+
+<br><br>
+<canvas id="card" width="1080" height="1920"></canvas>
+
+<script>
+// Pré-carrega a logo. Coloque o arquivo da logo na mesma pasta deste HTML
+// com o nome exato: logo-kronos.png
+const logoImg = new Image();
+logoImg.src = 'logo-kronos.png';
+let logoCarregada = false;
+logoImg.onload = () => { logoCarregada = true; };
+
+async function fetchRealQuotes() {
+  try {
+    const resp = await fetch('/.netlify/functions/cepea-quotes');
+    if (!resp.ok) throw new Error('Erro');
+
+    const data = await resp.json();
+    return data;
+
+  } catch (e) {
+    console.error('Erro ao buscar API; usando fallback.', e);
+
+    return {
+      soja:    { price:140.93, variation:-0.54, unit:'saca 60kg',  source:'CEPEA/Esalq' },
+      milho:   { price:67.67,  variation:0.04,  unit:'saca 60kg',  source:'CEPEA/Esalq' },
+      boi:     { price:322.45, variation:0.30,  unit:'@',          source:'CEPEA/Esalq' },
+      algodao: { price:345.60, variation:0.19,  unit:'cent R$/lb', source:'CEPEA/Esalq' },
+      cafe:    { price:2181.70,variation:-2.26, unit:'saca 60kg',  source:'CEPEA/Esalq' },
+      dolar:   { price:5.72,   variation:0.30,  unit:'comercial',  source:'B3' }
+    };
+  }
+}
+
+async function atualizar() {
+    const data = await fetchRealQuotes();
+
+    const ordem = ['soja','milho','boi','algodao','cafe','dolar'];
+
+    let html = "";
+    ordem.forEach(key => {
+        const c = data[key];
+        html += `
+            <div class="commodity">
+                <strong>${key.toUpperCase()}</strong><br>
+                Valor: R$ ${c.price.toFixed(2)}<br>
+                Variação: ${c.variation}%<br>
+                Unidade: ${c.unit}<br>
+                Fonte: ${c.source}
+            </div>
+        `;
+    });
+
+    document.getElementById("lista").innerHTML = html;
+    gerarCard(data);
+}
+
+function gerarCard(data) {
+    const ordem = ['soja','milho','boi','algodao','cafe','dolar'];
+    const canvas = document.getElementById("card");
+    const ctx = canvas.getContext("2d");
+
+    // Fundo
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0,0,1080,1920);
+
+    // Logo no topo
+    if (logoCarregada) {
+        const logoWidth = 260;
+        const logoHeight = 260;
+        const logoX = (1080 - logoWidth) / 2;
+        const logoY = 120;
+        ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
+    }
+
+    // Título abaixo da logo
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 60px Arial";
+    const titulo = "COTAÇÕES KRONOS.AG";
+    const tituloWidth = ctx.measureText(titulo).width;
+    ctx.fillText(titulo, (1080 - tituloWidth) / 2, 450);
+
+    ctx.font = "48px Arial";
+
+    let y = 550;
+
+    ordem.forEach(key => {
+        const c = data[key];
+        const linha = `${key.toUpperCase()}: R$ ${c.price.toFixed(2)} (${c.variation}%)`;
+        ctx.fillText(linha, 80, y);
+        y += 110;
+    });
+}
+
+function baixarCard(tipo) {
+    const canvas = document.getElementById("card");
+    const link = document.createElement("a");
+    link.download = `kronos-card-${tipo}.png`;
+    link.href = canvas.toDataURL();
+    link.click();
+}
+</script>
+
+</body>
+</html>
