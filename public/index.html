@@ -21,19 +21,27 @@
             border-radius: 5px;
             font-size: 16px;
         }
-        .btn:hover {
-            background: #4A7340;
-        }
+        .btn:hover { background: #4A7340; }
+        .btn:disabled { background: #333; cursor: not-allowed; }
         .commodity {
             background: #1a1a1a;
             padding: 10px;
             margin: 8px 0;
             border-radius: 5px;
         }
+        #status {
+            font-size: 14px;
+            color: #aaa;
+            margin: 8px 0;
+            min-height: 20px;
+        }
+        .tag-ok  { color: #2ecc71; }
+        .tag-err { color: #e74c3c; }
         canvas {
             margin-top: 25px;
             border-radius: 10px;
             border: 1px solid #222;
+            max-width: 100%;
         }
     </style>
 </head>
@@ -42,7 +50,8 @@
 
 <h1>KRONOS.AG — Cotações Automáticas</h1>
 
-<button class="btn" onclick="atualizar()">🔄 Atualizar Cotações</button>
+<button class="btn" id="btnAtualizar" onclick="atualizar()">🔄 Atualizar Cotações</button>
+<div id="status">Clique em "Atualizar Cotações" para buscar os dados.</div>
 
 <div id="lista"></div>
 
@@ -60,56 +69,93 @@ logoImg.src = 'logo-kronos.png';
 let logoCarregada = false;
 logoImg.onload = () => { logoCarregada = true; };
 
-// Busca dados da API Vercel
-async function fetchRealQuotes() {
-  try {
-    const resp = await fetch('/api/cepea-quotes');
-    if (!resp.ok) throw new Error('Erro');
-    const data = await resp.json();
-    return data;
-  } catch (e) {
-    console.error('Erro ao buscar API; usando fallback.', e);
-    return {
-      soja:    { price:140.93, variation:-0.54, unit:'saca 60kg',  source:'CEPEA/Esalq' },
-      milho:   { price:67.67,  variation:0.04,  unit:'saca 60kg',  source:'CEPEA/Esalq' },
-      boi:     { price:322.45, variation:0.30,  unit:'@',          source:'CEPEA/Esalq' },
-      algodao: { price:345.60, variation:0.19,  unit:'cent R$/lb', source:'CEPEA/Esalq' },
-      cafe:    { price:2181.70,variation:-2.26, unit:'saca 60kg',  source:'CEPEA/Esalq' },
-      dolar:   { price:5.72,   variation:0.30,  unit:'comercial',  source:'B3' }
-    };
-  }
+// ---- Utilitários ----
+function formatPriceBR(value) {
+    return value.toFixed(2).replace('.', ',');
 }
 
+function dataFormatada() {
+    const hoje = new Date();
+    const dia = String(hoje.getDate()).padStart(2, '0');
+    const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+    const ano = hoje.getFullYear();
+    return `${dia}/${mes}/${ano}`;
+}
+
+// ---- Fetch API ----
+async function fetchRealQuotes() {
+    const resp = await fetch('/api/cepea-quotes');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+}
+
+// ---- Atualizar lista ----
 async function atualizar() {
-    const data = await fetchRealQuotes();
+    const btn = document.getElementById('btnAtualizar');
+    const status = document.getElementById('status');
+    btn.disabled = true;
+    btn.textContent = '⏳ Buscando...';
+    status.innerHTML = 'Buscando cotações...';
+
+    let data;
+    let usouFallback = false;
+
+    try {
+        data = await fetchRealQuotes();
+    } catch (e) {
+        console.error('API falhou, usando fallback:', e);
+        usouFallback = true;
+        data = {
+            soja:    { price: 140.93, variation: -0.54, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
+            milho:   { price:  67.67, variation:  0.04, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
+            boi:     { price: 322.45, variation:  0.30, unit: '@',          source: 'CEPEA/Esalq' },
+            algodao: { price: 345.60, variation:  0.19, unit: 'cent R$/lb', source: 'CEPEA/Esalq' },
+            cafe:    { price:2181.70, variation: -2.26, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
+            dolar:   { price:   5.72, variation:  0.30, unit: 'comercial',  source: 'B3' },
+        };
+    }
+
     window.ultimasCotacoes = data;
-    
-    const ordem = ['soja','milho','boi','algodao','cafe','dolar'];
-    let html = "";
+
+    const ordem = ['soja', 'milho', 'boi', 'algodao', 'cafe', 'dolar'];
+    const labels = { soja:'SOJA', milho:'MILHO', boi:'BOI GORDO', algodao:'ALGODÃO', cafe:'CAFÉ ARÁBICA', dolar:'DÓLAR' };
+
+    let html = '';
     ordem.forEach(key => {
         const c = data[key];
+        const varClass = c.variation >= 0 ? 'tag-ok' : 'tag-err';
+        const arrow    = c.variation >= 0 ? '▲' : '▼';
         html += `
             <div class="commodity">
-                <strong>${key.toUpperCase()}</strong><br>
-                Valor: R$ ${c.price.toFixed(2)}<br>
-                Variação: ${c.variation}%<br>
-                Unidade: ${c.unit}<br>
-                Fonte: ${c.source}
-            </div>
-        `;
+                <strong>${labels[key]}</strong> — R$ ${formatPriceBR(c.price)} / ${c.unit}<br>
+                Variação: <span class="${varClass}">${arrow} ${Math.abs(c.variation).toFixed(2)}%</span>
+                &nbsp;|&nbsp; Fonte: ${c.source}
+            </div>`;
     });
-    document.getElementById("lista").innerHTML = html;
+
+    document.getElementById('lista').innerHTML = html;
+
+    if (usouFallback) {
+        status.innerHTML = '<span class="tag-err">⚠️ API indisponível — exibindo valores do último registro.</span>';
+    } else {
+        status.innerHTML = `<span class="tag-ok">✅ Atualizado em ${dataFormatada()} às ${new Date().toLocaleTimeString('pt-BR')}</span>`;
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🔄 Atualizar Cotações';
+
     gerarCard(data, ultimaCorFundo);
 }
 
+// ---- Geração do Card Canvas ----
 function drawMultilineText(ctx, text, x, y, maxWidth, lineHeight) {
     const words = text.split(' ');
     let line = '';
     for (let n = 0; n < words.length; n++) {
         const testLine = line + words[n] + ' ';
-        const metrics = ctx.measureText(testLine);
-        const testWidth = metrics.width;
-        if (testWidth > maxWidth && n > 0) {
+        if (ctx.measureText(testLine).width > maxWidth && n > 0) {
             ctx.fillText(line, x, y);
             line = words[n] + ' ';
             y += lineHeight;
@@ -120,192 +166,129 @@ function drawMultilineText(ctx, text, x, y, maxWidth, lineHeight) {
     ctx.fillText(line, x, y);
 }
 
-function formatPriceBR(value) {
-    return value.toFixed(2).replace('.', ',');
-}
-
 function gerarCard(data, corFundo = 'preto') {
-    const ordem = ['soja','milho','boi','algodao','cafe','dolar'];
-    const labels = {
-        soja: 'SOJA',
-        milho: 'MILHO',
-        boi: 'BOI GORDO',
-        algodao: 'ALGODÃO',
-        cafe: 'CAFÉ ARÁBICA',
-        dolar: 'DÓLAR'
-    };
-    const icons = {
-        soja: '🌱',
-        milho: '🌽',
-        boi: '🐂',
-        algodao: '⚪',
-        cafe: '☕',
-        dolar: '💵'
-    };
+    const ordem = ['soja', 'milho', 'boi', 'algodao', 'cafe', 'dolar'];
+    const labels = { soja:'SOJA', milho:'MILHO', boi:'BOI GORDO', algodao:'ALGODÃO', cafe:'CAFÉ ARÁBICA', dolar:'DÓLAR' };
+    const icons  = { soja:'🌱', milho:'🌽', boi:'🐂', algodao:'⚪', cafe:'☕', dolar:'💵' };
     const stripeColors = {
-        soja: '#e74c3c',
-        milho: '#27ae60',
-        boi: '#27ae60',
-        algodao: '#e67e22',
-        cafe: '#9b59b6',
-        dolar: '#2980b9'
+        soja:'#e74c3c', milho:'#27ae60', boi:'#27ae60',
+        algodao:'#e67e22', cafe:'#9b59b6', dolar:'#2980b9'
     };
 
-    const canvas = document.getElementById("card");
-    const ctx = canvas.getContext("2d");
+    const canvas = document.getElementById('card');
+    const ctx    = canvas.getContext('2d');
     const W = canvas.width;
     const H = canvas.height;
 
-    // Definir cores por tema
     const cores = corFundo === 'branco' ? {
-        fundo: '#FFFFFF',
-        texto: '#2A2A2A',
-        cardBg: '#F5F5F5',
-        rodape: '#2A2A2A'
+        fundo: '#FFFFFF', texto: '#2A2A2A', cardBg: '#F5F5F5', rodape: '#2A2A2A'
     } : {
-        fundo: '#050607',
-        texto: '#FFFFFF',
-        cardBg: '#131516',
-        rodape: '#FFFFFF'
+        fundo: '#050607', texto: '#FFFFFF', cardBg: '#131516', rodape: '#FFFFFF'
     };
 
     // Fundo
     ctx.fillStyle = cores.fundo;
     ctx.fillRect(0, 0, W, H);
 
-    // HEADER - Logo
+    // Logo
     if (logoCarregada) {
-        const logoWidth = 220;
-        const logoHeight = 220;
-        const logoX = 80;
-        const logoY = 120;
-        
         if (corFundo === 'branco') {
-            // Inverter cores da logo para fundo branco
             ctx.save();
             ctx.filter = 'brightness(0.3)';
-            ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
+            ctx.drawImage(logoImg, 80, 120, 220, 220);
             ctx.restore();
-            ctx.filter = 'none';
         } else {
-            ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
+            ctx.drawImage(logoImg, 80, 120, 220, 220);
         }
     }
 
-    // Texto à direita da logo
+    // Nome
     ctx.fillStyle = cores.texto;
-    ctx.font = "bold 64px Arial";
-    ctx.fillText("KRONOS.AG", 340, 190);
+    ctx.font = 'bold 64px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('KRONOS.AG', 340, 190);
 
-    // Texto à direita da logo - 2 linhas
-    ctx.fillStyle = cores.texto;
-    ctx.font = "28px Arial";
-    ctx.fillText("Gestão e curadoria estratégica", 340, 230);
-    ctx.fillText("sob medida para o agronegócio", 340, 268);
+    ctx.font = '28px Arial';
+    ctx.fillText('Gestão e curadoria estratégica', 340, 230);
+    ctx.fillText('sob medida para o agronegócio', 340, 268);
 
-    // Bloco "COTAÇÕES" à direita
-    const hoje = new Date();
-    const dia = String(hoje.getDate()).padStart(2,'0');
-    const mes = String(hoje.getMonth()+1).padStart(2,'0');
-    const ano = hoje.getFullYear();
-    const dataStr = `${dia} de dezembro de ${ano}`;
+    // Data (corrigida — usa mês real)
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 36px Arial';
+    ctx.fillText(dataFormatada(), W - 80, 190);
+    ctx.textAlign = 'left';
 
-    ctx.textAlign = "right";
-    ctx.fillStyle = cores.texto;
-    ctx.font = "bold 42px Arial";
-    ctx.fillText("COTAÇÕES", W - 80, 180);
-    ctx.font = "20px Arial";
-    ctx.fillText(dataStr, W - 80, 220);
-    ctx.textAlign = "left";
-
-    // CARDS DE CADA ATIVO
-    let startY = 320;
-    const cardHeight = 220;
+    // Cards
+    const startY    = 340;
+    const cardH     = 220;
     const cardMargin = 16;
-    const cardLeft = 50;
+    const cardLeft  = 50;
     const cardRight = W - 50;
 
     ordem.forEach((key, index) => {
-        const c = data[key];
-        const top = startY + index * (cardHeight + cardMargin);
+        const c   = data[key];
+        const top = startY + index * (cardH + cardMargin);
 
-        // Fundo do card
         ctx.fillStyle = cores.cardBg;
-        ctx.fillRect(cardLeft, top, cardRight - cardLeft, cardHeight);
+        ctx.fillRect(cardLeft, top, cardRight - cardLeft, cardH);
 
-        // Faixa colorida à esquerda
-        ctx.fillStyle = stripeColors[key] || "#5C8B4F";
-        ctx.fillRect(cardLeft, top, 12, cardHeight);
+        ctx.fillStyle = stripeColors[key] || '#5C8B4F';
+        ctx.fillRect(cardLeft, top, 12, cardH);
 
         ctx.fillStyle = cores.texto;
+        ctx.textAlign = 'left';
+        ctx.font = 'bold 48px Arial';
+        ctx.fillText(`${icons[key]}  ${labels[key]}`, cardLeft + 60, top + 70);
 
-        // LINHA 1: Ícone + Nome (esquerda) | Preço (direita)
-        ctx.textAlign = "left";
-        ctx.font = "bold 48px Arial";
-        const label = labels[key];
-        const icon = icons[key] || "";
-        ctx.fillText(`${icon}  ${label}`, cardLeft + 60, top + 70);
+        ctx.textAlign = 'right';
+        ctx.font = key === 'cafe' ? 'bold 62px Arial' : 'bold 70px Arial';
+        ctx.fillText(`R$ ${formatPriceBR(c.price)}`, cardRight - 50, top + 70);
 
-        ctx.textAlign = "right";
-        // Café tem preço maior, usar fonte menor
-        const fontSize = key === 'cafe' ? "bold 62px Arial" : "bold 70px Arial";
-        ctx.font = fontSize;
-        const priceText = `R$ ${formatPriceBR(c.price)}`;
-        ctx.fillText(priceText, cardRight - 50, top + 70);
-
-        // LINHA 2: Fonte (esquerda) | Unidade (direita)
-        ctx.textAlign = "left";
-        ctx.font = "26px Arial";
+        ctx.textAlign = 'left';
+        ctx.font = '26px Arial';
         ctx.fillText(`Fonte: ${c.source}`, cardLeft + 60, top + 115);
 
-        ctx.textAlign = "right";
-        ctx.font = "26px Arial";
-        const unitText = `/ ${c.unit}`;
-        ctx.fillText(unitText, cardRight - 50, top + 115);
+        ctx.textAlign = 'right';
+        ctx.font = '26px Arial';
+        ctx.fillText(`/ ${c.unit}`, cardRight - 50, top + 115);
 
-        // LINHA 3: Variação (canto inferior direito)
-        const arrow = c.variation >= 0 ? "▲" : "▼";
-        const varColor = c.variation >= 0 ? "#2ecc71" : "#e74c3c";
-        const varText = `${arrow} ${Math.abs(c.variation).toFixed(2)}%`;
-        
+        const arrow    = c.variation >= 0 ? '▲' : '▼';
+        const varColor = c.variation >= 0 ? '#2ecc71' : '#e74c3c';
         ctx.fillStyle = varColor;
-        ctx.font = "bold 34px Arial";
-        ctx.fillText(varText, cardRight - 50, top + 180);
-        
-        ctx.textAlign = "left";
+        ctx.font = 'bold 34px Arial';
+        ctx.fillText(`${arrow} ${Math.abs(c.variation).toFixed(2)}%`, cardRight - 50, top + 180);
+
+        ctx.textAlign = 'left';
     });
 
-    // RODAPÉ
+    // Rodapé
     ctx.fillStyle = cores.rodape;
-    ctx.font = "32px Arial";
-    const footer = "kronos-ag.com";
-    const footerWidth = ctx.measureText(footer).width;
-    ctx.fillText(footer, (W - footerWidth) / 2, H - 140);
+    ctx.font = '32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('kronos-ag.com', W / 2, H - 140);
+    ctx.textAlign = 'left';
 }
 
-// Variável global
+// ---- Download ----
 let ultimaCorFundo = 'preto';
 
-// Download
 function baixarCard(tipo) {
     ultimaCorFundo = tipo;
     const data = window.ultimasCotacoes || {
-        soja:    { price:140.93, variation:-0.54, unit:'saca 60kg',  source:'CEPEA/Esalq' },
-        milho:   { price:67.67,  variation:0.04,  unit:'saca 60kg',  source:'CEPEA/Esalq' },
-        boi:     { price:322.45, variation:0.30,  unit:'@',          source:'CEPEA/Esalq' },
-        algodao: { price:345.60, variation:0.19,  unit:'cent R$/lb', source:'CEPEA/Esalq' },
-        cafe:    { price:2181.70,variation:-2.26, unit:'saca 60kg',  source:'CEPEA/Esalq' },
-        dolar:   { price:5.72,   variation:0.30,  unit:'comercial',  source:'B3' }
+        soja:    { price: 140.93, variation: -0.54, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
+        milho:   { price:  67.67, variation:  0.04, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
+        boi:     { price: 322.45, variation:  0.30, unit: '@',          source: 'CEPEA/Esalq' },
+        algodao: { price: 345.60, variation:  0.19, unit: 'cent R$/lb', source: 'CEPEA/Esalq' },
+        cafe:    { price:2181.70, variation: -2.26, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
+        dolar:   { price:   5.72, variation:  0.30, unit: 'comercial',  source: 'B3' },
     };
     gerarCard(data, tipo);
-    
     setTimeout(() => {
-        const canvas = document.getElementById("card");
-        const link = document.createElement("a");
+        const link = document.createElement('a');
         link.download = `kronos-card-${tipo}.png`;
-        link.href = canvas.toDataURL("image/png");
+        link.href = document.getElementById('card').toDataURL('image/png');
         link.click();
-    }, 100);
+    }, 200);
 }
 </script>
 
