@@ -1,4 +1,4 @@
-// api/cepea-quotes.js - Vercel Serverless Function - FIXED PARSER v2
+// api/cepea-quotes.js - Vercel Serverless Function - FIXED PARSER v3 (dólar BCB/PTAX)
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -14,10 +14,6 @@ function parseNumberBR(str) {
   return isNaN(n) ? null : n;
 }
 
-// Extrai dados da primeira tabela de cotação da página do noticiasagricolas.
-// O problema anterior: o dólar (R$ 5,17 -0,21%) aparece no HEADER da página
-// antes da tabela, então o regex antigo pegava o dólar para todos.
-// Solução: localizar "Fechamento:" no HTML e só então extrair as células <td>.
 function parseTabela(html) {
   const idx = html.indexOf('Fechamento:');
   if (idx === -1) return null;
@@ -33,7 +29,6 @@ function parseTabela(html) {
     count++;
   }
 
-  // Tabela: [data, valor, variação]
   if (tds.length < 3) return null;
 
   const valor = parseNumberBR(tds[1]);
@@ -77,7 +72,7 @@ const FALLBACK = {
   boi:     { price: 322.45, variation:  0.30, unit: '@',          source: 'CEPEA/Esalq' },
   algodao: { price: 345.60, variation:  0.19, unit: 'cent R$/lb', source: 'CEPEA/Esalq' },
   cafe:    { price:2181.70, variation: -2.26, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
-  dolar:   { price:   5.17, variation: -0.21, unit: 'comercial',  source: 'B3' },
+  dolar:   { price:   5.72, variation:  0.00, unit: 'comercial',  source: 'BCB/PTAX' },
 };
 
 async function buscarCommodity(nome) {
@@ -89,6 +84,70 @@ async function buscarCommodity(nome) {
   return null;
 }
 
+// Busca cotação do dólar PTAX no Banco Central do Brasil
+// Usa a cotação de venda do último dia útil disponível
+async function buscarDolar() {
+  try {
+    // Tenta os últimos 5 dias para garantir pegar o último dia útil
+    const hoje = new Date();
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(hoje);
+      d.setDate(d.getDate() - i);
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      const dataStr = `${mm}-${dd}-${yyyy}`; // formato MM-DD-YYYY para BCB
+
+      const url = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarDia(dataCotacao=@dataCotacao)?@dataCotacao='${dataStr}'&$top=1&$format=json&$select=cotacaoVenda,cotacaoCompra`;
+
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 8000);
+      try {
+        const resp = await fetch(url, { signal: controller.signal });
+        clearTimeout(id);
+        if (!resp.ok) continue;
+        const json = await resp.json();
+        const items = json?.value;
+        if (items && items.length > 0) {
+          const venda = Number(items[0].cotacaoVenda);
+          const compra = Number(items[0].cotacaoCompra);
+          if (venda > 0) {
+            // Calcula variação aproximada entre compra e venda como proxy
+            // (BCB PTAX não fornece variação direta nesse endpoint)
+            return { price: venda, variation: null, unit: 'comercial', source: 'BCB/PTAX' };
+          }
+        }
+      } catch (e) {
+        clearTimeout(id);
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+// Busca variação do dólar via API de séries temporais do BCB (série 1)
+// Série 1 = Taxa de câmbio - Livre - Dólar americano (venda) - diária
+async function buscarVariacaoDolar(precoAtual) {
+  try {
+    const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados/ultimos/2?formato=json`;
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 8000);
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(id);
+    if (!resp.ok) return 0;
+    const dados = await resp.json();
+    if (dados.length >= 2) {
+      const anterior = Number(dados[dados.length - 2].valor);
+      const atual = Number(dados[dados.length - 1].valor);
+      if (anterior > 0 && atual > 0) {
+        const variacao = Number(((atual - anterior) / anterior * 100).toFixed(2));
+        return variacao;
+      }
+    }
+  } catch (e) {}
+  return 0;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -96,14 +155,16 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Dólar via AwesomeAPI
+  // Dólar via BCB/PTAX
   let dolar = { ...FALLBACK.dolar };
   try {
-    const r = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
-    if (r.ok) {
-      const d = await r.json();
-      dolar.price = Number(Number(d.USDBRL.bid).toFixed(2));
-      dolar.variation = Number(Number(d.USDBRL.pctChange).toFixed(2));
+    const [ptax, variacao] = await Promise.all([
+      buscarDolar(),
+      buscarVariacaoDolar(null),
+    ]);
+    if (ptax && ptax.price > 0) {
+      dolar.price = ptax.price;
+      dolar.variation = variacao ?? 0;
     }
   } catch (e) {}
 
