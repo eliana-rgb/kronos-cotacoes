@@ -1,4 +1,4 @@
-// api/cepea-quotes.js - Vercel Serverless Function - FIXED PARSER v3 (dólar BCB/PTAX)
+// api/cepea-quotes.js - Vercel Serverless Function - FIXED v5 (dolar COMERCIAL via AwesomeAPI + fallback PTAX)
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -72,7 +72,7 @@ const FALLBACK = {
   boi:     { price: 322.45, variation:  0.30, unit: '@',          source: 'CEPEA/Esalq' },
   algodao: { price: 345.60, variation:  0.19, unit: 'cent R$/lb', source: 'CEPEA/Esalq' },
   cafe:    { price:2181.70, variation: -2.26, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
-  dolar:   { price:   5.72, variation:  0.00, unit: 'comercial',  source: 'BCB/PTAX' },
+  dolar:   { price:   5.09, variation:  0.00, unit: 'comercial',  source: 'AwesomeAPI' },
 };
 
 async function buscarCommodity(nome) {
@@ -84,21 +84,42 @@ async function buscarCommodity(nome) {
   return null;
 }
 
-// Busca cotação do dólar PTAX no Banco Central do Brasil
-// Usa a cotação de venda do último dia útil disponível
-async function buscarDolar() {
+// FONTE PRIMARIA: Dolar COMERCIAL em tempo real via AwesomeAPI.
+async function buscarDolarComercial() {
   try {
-    // Tenta os últimos 5 dias para garantir pegar o último dia útil
+    const url = 'https://economia.awesomeapi.com.br/json/last/USD-BRL';
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 6000);
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(id);
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    const d = json && json.USDBRL;
+    if (!d) return null;
+    const ask = Number(d.ask);
+    const pct = Number(d.pctChange);
+    if (ask > 0) {
+      return { price: ask, variation: isFinite(pct) ? pct : 0, unit: 'comercial', source: 'AwesomeAPI' };
+    }
+  } catch (e) {}
+  return null;
+}
+
+// FALLBACK: PTAX de Fechamento do Banco Central.
+async function buscarDolarPTAX() {
+  try {
     const hoje = new Date();
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 7; i++) {
       const d = new Date(hoje);
       d.setDate(d.getDate() - i);
       const dd = String(d.getDate()).padStart(2, '0');
       const mm = String(d.getMonth() + 1).padStart(2, '0');
       const yyyy = d.getFullYear();
-      const dataStr = `${mm}-${dd}-${yyyy}`; // formato MM-DD-YYYY para BCB
+      const dataStr = `${mm}-${dd}-${yyyy}`;
 
-      const url = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarDia(dataCotacao=@dataCotacao)?@dataCotacao='${dataStr}'&$top=1&$format=json&$select=cotacaoVenda,cotacaoCompra`;
+      const filter = encodeURIComponent("tipoBoletim eq 'Fechamento'");
+      const orderby = encodeURIComponent('dataHoraCotacao desc');
+      const url = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarDia(dataCotacao=@dataCotacao)?@dataCotacao='${dataStr}'&$filter=${filter}&$orderby=${orderby}&$top=1&$format=json&$select=cotacaoVenda,cotacaoCompra,dataHoraCotacao,tipoBoletim`;
 
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), 8000);
@@ -107,14 +128,11 @@ async function buscarDolar() {
         clearTimeout(id);
         if (!resp.ok) continue;
         const json = await resp.json();
-        const items = json?.value;
+        const items = json && json.value;
         if (items && items.length > 0) {
           const venda = Number(items[0].cotacaoVenda);
-          const compra = Number(items[0].cotacaoCompra);
           if (venda > 0) {
-            // Calcula variação aproximada entre compra e venda como proxy
-            // (BCB PTAX não fornece variação direta nesse endpoint)
-            return { price: venda, variation: null, unit: 'comercial', source: 'BCB/PTAX' };
+            return { price: venda, variation: 0, unit: 'comercial', source: 'BCB/PTAX' };
           }
         }
       } catch (e) {
@@ -125,50 +143,26 @@ async function buscarDolar() {
   return null;
 }
 
-// Busca variação do dólar via API de séries temporais do BCB (série 1)
-// Série 1 = Taxa de câmbio - Livre - Dólar americano (venda) - diária
-async function buscarVariacaoDolar(precoAtual) {
-  try {
-    const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados/ultimos/2?formato=json`;
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 8000);
-    const resp = await fetch(url, { signal: controller.signal });
-    clearTimeout(id);
-    if (!resp.ok) return 0;
-    const dados = await resp.json();
-    if (dados.length >= 2) {
-      const anterior = Number(dados[dados.length - 2].valor);
-      const atual = Number(dados[dados.length - 1].valor);
-      if (anterior > 0 && atual > 0) {
-        const variacao = Number(((atual - anterior) / anterior * 100).toFixed(2));
-        return variacao;
-      }
-    }
-  } catch (e) {}
-  return 0;
-}
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Cache-Control', 's-maxage=1800');
+  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Dólar via BCB/PTAX
   let dolar = { ...FALLBACK.dolar };
   try {
-    const [ptax, variacao] = await Promise.all([
-      buscarDolar(),
-      buscarVariacaoDolar(null),
-    ]);
-    if (ptax && ptax.price > 0) {
-      dolar.price = ptax.price;
-      dolar.variation = variacao ?? 0;
+    const comercial = await buscarDolarComercial();
+    if (comercial && comercial.price > 0) {
+      dolar = comercial;
+    } else {
+      const ptax = await buscarDolarPTAX();
+      if (ptax && ptax.price > 0) {
+        dolar = ptax;
+      }
     }
   } catch (e) {}
 
-  // Commodities em paralelo
   const nomes = ['soja', 'milho', 'boi', 'algodao', 'cafe'];
   const resultados = await Promise.allSettled(nomes.map(n => buscarCommodity(n)));
 
