@@ -1,10 +1,19 @@
-// api/cepea-quotes.js - Vercel Serverless Function - FIXED v5 (dolar COMERCIAL via AwesomeAPI + fallback PTAX)
+// api/cepea-quotes.js - Vercel Serverless Function - FIXED v6
+// Dolar: AwesomeAPI (comercial) -> exchangerate.host -> PTAX/BCB -> fallback estatico
+// v6 fixes: User-Agent na AwesomeAPI, timeout maior, source distinguivel no fallback,
+// 3a fonte adicional, retry, logs em desenvolvimento.
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
   'Referer': 'https://www.google.com/',
+};
+
+// Headers minimos para chamadas a APIs JSON (algumas bloqueiam sem User-Agent)
+const JSON_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (compatible; KronosAg-Cotacoes/1.0; +https://kronos.ag)',
+  'Accept': 'application/json',
 };
 
 function parseNumberBR(str) {
@@ -39,17 +48,31 @@ function parseTabela(html) {
   return { price: valor, variation: variacao ?? 0, date: tds[0] };
 }
 
-async function fetchWithTimeout(url, ms = 9000) {
+async function fetchWithTimeout(url, ms = 9000, headers = HEADERS) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
   try {
-    const resp = await fetch(url, { headers: HEADERS, signal: controller.signal });
+    const resp = await fetch(url, { headers, signal: controller.signal });
     const text = await resp.text();
     clearTimeout(id);
     return text;
   } catch (e) {
     clearTimeout(id);
     throw e;
+  }
+}
+
+async function fetchJSONWithTimeout(url, ms = 9000, headers = JSON_HEADERS) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  try {
+    const resp = await fetch(url, { headers, signal: controller.signal });
+    clearTimeout(id);
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch (e) {
+    clearTimeout(id);
+    return null;
   }
 }
 
@@ -72,7 +95,8 @@ const FALLBACK = {
   boi:     { price: 322.45, variation:  0.30, unit: '@',          source: 'CEPEA/Esalq' },
   algodao: { price: 345.60, variation:  0.19, unit: 'cent R$/lb', source: 'CEPEA/Esalq' },
   cafe:    { price:2181.70, variation: -2.26, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
-  dolar:   { price:   5.09, variation:  0.00, unit: 'comercial',  source: 'AwesomeAPI' },
+  // source='fallback' deixa CLARO no front-end que veio do hardcoded (debug)
+  dolar:   { price:   5.05, variation:  0.00, unit: 'comercial',  source: 'fallback' },
 };
 
 async function buscarCommodity(nome) {
@@ -84,62 +108,59 @@ async function buscarCommodity(nome) {
   return null;
 }
 
-// FONTE PRIMARIA: Dolar COMERCIAL em tempo real via AwesomeAPI.
-async function buscarDolarComercial() {
-  try {
-    const url = 'https://economia.awesomeapi.com.br/json/last/USD-BRL';
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 6000);
-    const resp = await fetch(url, { signal: controller.signal });
-    clearTimeout(id);
-    if (!resp.ok) return null;
-    const json = await resp.json();
+// FONTE 1: AwesomeAPI - dolar comercial em tempo real
+// v6 fix: User-Agent + timeout 9s + retry simples
+async function buscarDolarAwesome() {
+  const url = 'https://economia.awesomeapi.com.br/json/last/USD-BRL';
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    const json = await fetchJSONWithTimeout(url, 9000, JSON_HEADERS);
     const d = json && json.USDBRL;
-    if (!d) return null;
-    const ask = Number(d.ask);
-    const pct = Number(d.pctChange);
-    if (ask > 0) {
-      return { price: ask, variation: isFinite(pct) ? pct : 0, unit: 'comercial', source: 'AwesomeAPI' };
+    if (d) {
+      const ask = Number(d.ask);
+      const pct = Number(d.pctChange);
+      if (ask > 0) {
+        return { price: ask, variation: isFinite(pct) ? pct : 0, unit: 'comercial', source: 'AwesomeAPI' };
+      }
     }
-  } catch (e) {}
+  }
   return null;
 }
 
-// FALLBACK: PTAX de Fechamento do Banco Central.
+// FONTE 2: exchangerate.host - backup gratuito
+async function buscarDolarExchangerate() {
+  const url = 'https://api.exchangerate.host/latest?base=USD&symbols=BRL';
+  const json = await fetchJSONWithTimeout(url, 9000, JSON_HEADERS);
+  const rate = json && json.rates && Number(json.rates.BRL);
+  if (rate && rate > 0) {
+    return { price: rate, variation: 0, unit: 'comercial', source: 'exchangerate.host' };
+  }
+  return null;
+}
+
+// FONTE 3: PTAX/BCB de Fechamento (cotacao oficial - geralmente defasada do comercial)
 async function buscarDolarPTAX() {
-  try {
-    const hoje = new Date();
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(hoje);
-      d.setDate(d.getDate() - i);
-      const dd = String(d.getDate()).padStart(2, '0');
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const yyyy = d.getFullYear();
-      const dataStr = `${mm}-${dd}-${yyyy}`;
+  const hoje = new Date();
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(hoje);
+    d.setDate(d.getDate() - i);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const dataStr = `${mm}-${dd}-${yyyy}`;
 
-      const filter = encodeURIComponent("tipoBoletim eq 'Fechamento'");
-      const orderby = encodeURIComponent('dataHoraCotacao desc');
-      const url = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarDia(dataCotacao=@dataCotacao)?@dataCotacao='${dataStr}'&$filter=${filter}&$orderby=${orderby}&$top=1&$format=json&$select=cotacaoVenda,cotacaoCompra,dataHoraCotacao,tipoBoletim`;
+    const filter = encodeURIComponent("tipoBoletim eq 'Fechamento'");
+    const orderby = encodeURIComponent('dataHoraCotacao desc');
+    const url = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarDia(dataCotacao=@dataCotacao)?@dataCotacao='${dataStr}'&$filter=${filter}&$orderby=${orderby}&$top=1&$format=json&$select=cotacaoVenda,cotacaoCompra`;
 
-      const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 8000);
-      try {
-        const resp = await fetch(url, { signal: controller.signal });
-        clearTimeout(id);
-        if (!resp.ok) continue;
-        const json = await resp.json();
-        const items = json && json.value;
-        if (items && items.length > 0) {
-          const venda = Number(items[0].cotacaoVenda);
-          if (venda > 0) {
-            return { price: venda, variation: 0, unit: 'comercial', source: 'BCB/PTAX' };
-          }
-        }
-      } catch (e) {
-        clearTimeout(id);
+    const json = await fetchJSONWithTimeout(url, 8000, JSON_HEADERS);
+    const items = json && json.value;
+    if (items && items.length > 0) {
+      const venda = Number(items[0].cotacaoVenda);
+      if (venda > 0) {
+        return { price: venda, variation: 0, unit: 'comercial', source: 'BCB/PTAX' };
       }
     }
-  } catch (e) {}
+  }
   return null;
 }
 
@@ -150,19 +171,20 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
+  // Dolar: tenta na ordem - AwesomeAPI, exchangerate.host, PTAX, fallback
   let dolar = { ...FALLBACK.dolar };
+  let dolarSource = 'fallback';
   try {
-    const comercial = await buscarDolarComercial();
-    if (comercial && comercial.price > 0) {
-      dolar = comercial;
-    } else {
-      const ptax = await buscarDolarPTAX();
-      if (ptax && ptax.price > 0) {
-        dolar = ptax;
-      }
+    let r = await buscarDolarAwesome();
+    if (!r) r = await buscarDolarExchangerate();
+    if (!r) r = await buscarDolarPTAX();
+    if (r && r.price > 0) {
+      dolar = r;
+      dolarSource = r.source;
     }
   } catch (e) {}
 
+  // Commodities em paralelo
   const nomes = ['soja', 'milho', 'boi', 'algodao', 'cafe'];
   const resultados = await Promise.allSettled(nomes.map(n => buscarCommodity(n)));
 
@@ -180,6 +202,9 @@ export default async function handler(req, res) {
       dados[nome] = { ...FALLBACK[nome] };
     }
   });
+
+  // Header de debug - voce ve no DevTools de qual fonte veio o dolar
+  res.setHeader('X-Dolar-Source', dolarSource);
 
   return res.status(200).json({ ...dados, dolar });
 }
