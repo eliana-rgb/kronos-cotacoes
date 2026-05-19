@@ -1,296 +1,380 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8" />
-    <title>KRONOS.AG - Cotações</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #0B0C10;
-            color: white;
-            padding: 20px;
-        }
-        h1 { color: #5C8B4F; margin-bottom: 10px; }
-        .btn {
-            padding: 10px 20px;
-            background: #5C8B4F;
-            color: white;
-            border: none;
-            cursor: pointer;
-            margin: 10px 5px;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-        .btn:hover { background: #4A7340; }
-        .btn:disabled { background: #333; cursor: not-allowed; }
-        .commodity {
-            background: #1a1a1a;
-            padding: 10px;
-            margin: 8px 0;
-            border-radius: 5px;
-        }
-        #status {
-            font-size: 14px;
-            color: #aaa;
-            margin: 8px 0;
-            min-height: 20px;
-        }
-        .tag-ok  { color: #2ecc71; }
-        .tag-err { color: #e74c3c; }
-        canvas {
-            margin-top: 25px;
-            border-radius: 10px;
-            border: 1px solid #222;
-            max-width: 100%;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KRONOS · Boletim do Dia</title>
+<!--
+  DIRETRIZ KRONOS (sempre seguir):
+  Publico 50+. Fontes nunca abaixo de 22px no boletim. Cinzas sempre fortes
+  (#4A4A4A ou mais escuro). Contraste alto. Pesos Medium pra labels pequenos.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&family=Space+Grotesk:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FAF9F6;
+    --charcoal: #1A1A1A;
+    --green-night: #081A13;
+    --green: #4C7A3C;
+    --gold: #C9A961;
+    --mid: #4A4A4A;
+    --dark-mid: #3C3C3C;
+    --red: #9F2F2F;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--cream);
+    color: var(--charcoal);
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+    padding: 40px 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  header { text-align: center; padding-bottom: 30px; border-bottom: 1px solid rgba(15,15,15,0.1); margin-bottom: 30px; }
+  header h1 {
+    font-family: 'Cormorant Garamond', serif; font-weight: 300; font-size: 2.4rem;
+    letter-spacing: -0.5px; color: var(--green-night);
+  }
+  header h1 em { font-style: italic; color: var(--gold); font-weight: 400; }
+  header p {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.82rem;
+    letter-spacing: 2px; text-transform: uppercase; color: var(--mid);
+    margin-top: 12px; font-weight: 500;
+  }
+
+  /* === Toggle de tema === */
+  .theme-toggle {
+    display: flex; justify-content: center; gap: 0; margin-bottom: 24px;
+    border: 1px solid var(--green-night); width: fit-content; margin-left: auto; margin-right: auto;
+  }
+  .theme-toggle button {
+    font-family: 'Space Grotesk', sans-serif; font-size: 0.9rem; font-weight: 500;
+    letter-spacing: 1.5px; text-transform: uppercase; padding: 14px 28px;
+    cursor: pointer; border: 0; background: transparent; color: var(--green-night);
+    transition: all 0.3s;
+  }
+  .theme-toggle button.active { background: var(--green-night); color: var(--cream); }
+  .theme-toggle button:hover:not(.active) { background: rgba(8,26,19,0.08); }
+
+  .preview-shell {
+    background: #fff; border: 1px solid rgba(15,15,15,0.1);
+    padding: 16px; margin-bottom: 24px; display: flex; justify-content: center;
+  }
+  canvas { width: 100%; max-width: 360px; height: auto; display: block; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+  button.action {
+    font-family: 'Space Grotesk', sans-serif; font-size: 0.95rem; font-weight: 500;
+    letter-spacing: 1.5px; text-transform: uppercase; padding: 18px 32px;
+    cursor: pointer; border: 1px solid var(--green-night); background: var(--green-night);
+    color: var(--cream); transition: all 0.3s;
+  }
+  button.action:hover { background: var(--gold); color: var(--green-night); border-color: var(--gold); }
+  button.action.secondary { background: transparent; color: var(--charcoal); }
+  button.action.secondary:hover { background: var(--green-night); color: var(--cream); }
+  button.action:disabled { opacity: 0.4; cursor: wait; }
+  .status {
+    text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
+    letter-spacing: 1.5px; text-transform: uppercase; color: var(--mid);
+    margin-top: 16px; min-height: 18px; font-weight: 500; line-height: 1.5;
+  }
+  .status.ok { color: var(--green); }
+  .status.warn { color: var(--red); }
+  .hint {
+    text-align: center; color: var(--mid); font-size: 1rem; line-height: 1.7;
+    margin-top: 30px; padding-top: 30px; border-top: 1px solid rgba(15,15,15,0.1);
+  }
+</style>
 </head>
-
 <body>
+<div class="wrap">
+  <header>
+    <h1>Boletim <em>do dia</em></h1>
+    <p>Cotações Kronos · 1080×1920 · Story / Status</p>
+  </header>
 
-<h1>KRONOS.AG — Cotações Automáticas</h1>
+  <div class="theme-toggle" id="themeToggle">
+    <button data-tema="cream" class="active">☀ Cream</button>
+    <button data-tema="verde">🌙 Verde-noite</button>
+  </div>
 
-<button class="btn" id="btnAtualizar" onclick="atualizar()">🔄 Atualizar Cotações</button>
-<div id="status">Clique em "Atualizar Cotações" para buscar os dados.</div>
+  <div class="preview-shell">
+    <canvas id="cv" width="1080" height="1920"></canvas>
+  </div>
 
-<div id="lista"></div>
+  <div class="controls">
+    <button class="action" id="btnDownload">⬇ Baixar imagem</button>
+    <button class="action secondary" id="btnRefresh">↻ Atualizar cotações</button>
+  </div>
 
-<h2 style="margin-top:30px;">📱 Card Instagram</h2>
-<button class="btn" onclick="baixarCard('preto')">Baixar Fundo Preto</button>
-<button class="btn" onclick="baixarCard('branco')">Baixar Fundo Branco</button>
+  <div class="status" id="status">Carregando cotações…</div>
 
-<br><br>
-<canvas id="card" width="1080" height="1920"></canvas>
+  <div class="hint">
+    Abra essa página todo dia. Escolha <b>cream</b> ou <b>verde-noite</b>, clique em
+    <b>Baixar imagem</b> e a foto vai pra galeria.<br>
+    De lá é só postar no Story do Instagram e no Status do WhatsApp.
+  </div>
+</div>
 
 <script>
-// Pré-carrega a logo
-const logoImg = new Image();
-logoImg.src = 'logo-kronos.png';
-let logoCarregada = false;
-logoImg.onload = () => { logoCarregada = true; };
+const CANVAS = document.getElementById('cv');
+const CTX = CANVAS.getContext('2d');
+const STATUS = document.getElementById('status');
 
-// ---- Utilitários ----
-function formatPriceBR(value) {
-    return value.toFixed(2).replace('.', ',');
-}
+// === Paletas dos 2 temas ===
+const TEMAS = {
+  cream: {
+    bg: '#FAF9F6',
+    textMain: '#1A1A1A',
+    textNumber: '#081A13',
+    textLabel: '#4A4A4A',
+    textLabelStrong: '#3C3C3C',
+    accent: '#4C7A3C',
+    up: '#4C7A3C',
+    down: '#9F2F2F',
+    gold: '#C9A961',
+    lineStrong: '#1A1A1A',
+    lineSoft: 'rgba(15,15,15,0.20)',
+  },
+  verde: {
+    bg: '#081A13',
+    textMain: '#FAF9F6',
+    textNumber: '#FAF9F6',
+    textLabel: '#D4B97A',
+    textLabelStrong: '#D4B97A',
+    accent: '#A7D269',
+    up: '#A7D269',
+    down: '#F0957B',
+    gold: '#D4B97A',
+    lineStrong: '#D4B97A',
+    lineSoft: 'rgba(212,185,122,0.30)',
+  },
+};
+
+const NOMES = { soja:'SOJA', milho:'MILHO', boi:'BOI GORDO', algodao:'ALGODÃO', cafe:'CAFÉ ARÁBICA' };
+const MESES = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
 
 function dataFormatada() {
-    const hoje = new Date();
-    const dia = String(hoje.getDate()).padStart(2, '0');
-    const mes = String(hoje.getMonth() + 1).padStart(2, '0');
-    const ano = hoje.getFullYear();
-    return `${dia}/${mes}/${ano}`;
+  const d = new Date();
+  const dia = String(d.getDate()).padStart(2,'0');
+  return `${dia}.${MESES[d.getMonth()]}.${d.getFullYear()}`;
+}
+function numeroBoletim() {
+  const inicio = new Date(2026, 0, 1);
+  return Math.floor((new Date() - inicio) / 86400000) + 1;
+}
+function fmtBR(v, casas=2) {
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+function fmtVar(v) {
+  return `${v>=0?'+':''}${v.toFixed(2).replace('.', ',')}%`;
 }
 
-// ---- Fetch API ----
-async function fetchRealQuotes() {
-    const resp = await fetch('/api/cepea-quotes');
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error);
-    return data;
-}
+// === Estado ===
+let TEMA_ATIVO = 'cream';
+let DADOS_ATUAIS = null;
 
-// ---- Atualizar lista ----
-async function atualizar() {
-    const btn = document.getElementById('btnAtualizar');
-    const status = document.getElementById('status');
-    btn.disabled = true;
-    btn.textContent = '⏳ Buscando...';
-    status.innerHTML = 'Buscando cotações...';
-
-    let data;
-    let usouFallback = false;
-
-    try {
-        data = await fetchRealQuotes();
-    } catch (e) {
-        console.error('API falhou, usando fallback:', e);
-        usouFallback = true;
-        data = {
-            soja:    { price: 140.93, variation: -0.54, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
-            milho:   { price:  67.67, variation:  0.04, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
-            boi:     { price: 322.45, variation:  0.30, unit: '@',          source: 'CEPEA/Esalq' },
-            algodao: { price: 345.60, variation:  0.19, unit: 'cent R$/lb', source: 'CEPEA/Esalq' },
-            cafe:    { price:2181.70, variation: -2.26, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
-            dolar:   { price:   5.72, variation:  0.30, unit: 'comercial',  source: 'B3' },
-        };
-    }
-
-    window.ultimasCotacoes = data;
-
-    const ordem = ['soja', 'milho', 'boi', 'algodao', 'cafe', 'dolar'];
-    const labels = { soja:'SOJA', milho:'MILHO', boi:'BOI GORDO', algodao:'ALGODÃO', cafe:'CAFÉ ARÁBICA', dolar:'DÓLAR' };
-
-    let html = '';
-    ordem.forEach(key => {
-        const c = data[key];
-        const varClass = c.variation >= 0 ? 'tag-ok' : 'tag-err';
-        const arrow    = c.variation >= 0 ? '▲' : '▼';
-        html += `
-            <div class="commodity">
-                <strong>${labels[key]}</strong> — R$ ${formatPriceBR(c.price)} / ${c.unit}<br>
-                Variação: <span class="${varClass}">${arrow} ${Math.abs(c.variation).toFixed(2)}%</span>
-                &nbsp;|&nbsp; Fonte: ${c.source}
-            </div>`;
-    });
-
-    document.getElementById('lista').innerHTML = html;
-
-    if (usouFallback) {
-        status.innerHTML = '<span class="tag-err">⚠️ API indisponível — exibindo valores do último registro.</span>';
+async function buscar() {
+  STATUS.textContent = 'Buscando cotações…';
+  STATUS.className = 'status';
+  try {
+    const r = await fetch('/api/cepea-quotes', { cache: 'no-store' });
+    if (!r.ok) throw new Error('API falhou');
+    const data = await r.json();
+    const fonte = r.headers.get('X-Dolar-Source') || (data.dolar && data.dolar.source) || '—';
+    const diag = r.headers.get('X-Dolar-Diag') || '';
+    if (fonte === 'fallback') {
+      STATUS.innerHTML = `Dólar caiu pro fallback · diagnóstico:<br><span style="font-size:0.7rem;opacity:0.8">${diag}</span>`;
+      STATUS.className = 'status warn';
     } else {
-        status.innerHTML = `<span class="tag-ok">✅ Atualizado em ${dataFormatada()} às ${new Date().toLocaleTimeString('pt-BR')}</span>`;
+      STATUS.innerHTML = `Atualizado · dólar via <b>${fonte}</b>` + (diag ? `<br><span style="font-size:0.65rem;opacity:0.6">${diag}</span>` : '');
+      STATUS.className = 'status ok';
     }
-
-    btn.disabled = false;
-    btn.textContent = '🔄 Atualizar Cotações';
-
-    gerarCard(data, ultimaCorFundo);
+    return data;
+  } catch (e) {
+    STATUS.textContent = 'API indisponível · usando valores de exemplo';
+    STATUS.className = 'status warn';
+    return {
+      soja:    { price: 121.30, variation:  0.04, unit: 'saca 60kg' },
+      milho:   { price:  67.67, variation:  0.04, unit: 'saca 60kg' },
+      boi:     { price: 322.45, variation:  0.30, unit: 'arroba' },
+      algodao: { price: 345.60, variation:  0.19, unit: 'cent R$/lb' },
+      cafe:    { price:2181.70, variation: -2.26, unit: 'saca 60kg' },
+      dolar:   { price:   4.99, variation: 0, unit: 'comercial' },
+    };
+  }
 }
 
-// ---- Geração do Card Canvas ----
-function drawMultilineText(ctx, text, x, y, maxWidth, lineHeight) {
-    const words = text.split(' ');
-    let line = '';
-    for (let n = 0; n < words.length; n++) {
-        const testLine = line + words[n] + ' ';
-        if (ctx.measureText(testLine).width > maxWidth && n > 0) {
-            ctx.fillText(line, x, y);
-            line = words[n] + ' ';
-            y += lineHeight;
-        } else {
-            line = testLine;
-        }
-    }
-    ctx.fillText(line, x, y);
-}
+// === Desenho do canvas (mesma estrutura, paleta vem do tema) ===
+function desenhar(data, tema) {
+  const W = 1080, H = 1920;
+  const C = TEMAS[tema];
+  const ctx = CTX;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0,0,W,H);
 
-function gerarCard(data, corFundo = 'preto') {
-    const ordem = ['soja', 'milho', 'boi', 'algodao', 'cafe', 'dolar'];
-    const labels = { soja:'SOJA', milho:'MILHO', boi:'BOI GORDO', algodao:'ALGODÃO', cafe:'CAFÉ ARÁBICA', dolar:'DÓLAR' };
-    const icons  = { soja:'🌱', milho:'🌽', boi:'🐂', algodao:'⚪', cafe:'☕', dolar:'💵' };
-    const stripeColors = {
-        soja:'#e74c3c', milho:'#27ae60', boi:'#27ae60',
-        algodao:'#e67e22', cafe:'#9b59b6', dolar:'#2980b9'
-    };
+  // ===== TOPO =====
+  ctx.fillStyle = C.textMain;
+  ctx.font = '500 44px "Space Grotesk"';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillText('KRONOS', 80, 80);
 
-    const canvas = document.getElementById('card');
-    const ctx    = canvas.getContext('2d');
-    const W = canvas.width;
-    const H = canvas.height;
+  ctx.fillStyle = C.textLabel;
+  ctx.font = '500 20px "JetBrains Mono"';
+  ctx.fillText('ENGENHARIA FINANCEIRA PARA O AGRONEGÓCIO', 80, 138);
 
-    const cores = corFundo === 'branco' ? {
-        fundo: '#FFFFFF', texto: '#2A2A2A', cardBg: '#F5F5F5', rodape: '#2A2A2A'
-    } : {
-        fundo: '#050607', texto: '#FFFFFF', cardBg: '#131516', rodape: '#FFFFFF'
-    };
+  ctx.fillStyle = C.textMain;
+  ctx.font = '500 30px "JetBrains Mono"';
+  ctx.textAlign = 'right';
+  ctx.fillText(dataFormatada(), W-80, 80);
 
-    // Fundo
-    ctx.fillStyle = cores.fundo;
-    ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = C.textLabel;
+  ctx.font = '400 22px "JetBrains Mono"';
+  ctx.fillText(`BOLETIM Nº ${numeroBoletim()}`, W-80, 138);
 
-    // Logo
-    if (logoCarregada) {
-        if (corFundo === 'branco') {
-            ctx.save();
-            ctx.filter = 'brightness(0.3)';
-            ctx.drawImage(logoImg, 80, 120, 220, 220);
-            ctx.restore();
-        } else {
-            ctx.drawImage(logoImg, 80, 120, 220, 220);
-        }
-    }
+  ctx.strokeStyle = C.lineStrong;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(80, 200); ctx.lineTo(W-80, 200); ctx.stroke();
 
-    // Nome
-    ctx.fillStyle = cores.texto;
-    ctx.font = 'bold 64px Arial';
-    ctx.textAlign = 'left';
-    ctx.fillText('KRONOS.AG', 340, 190);
+  // Eyebrow
+  ctx.fillStyle = C.accent;
+  ctx.font = '500 30px "JetBrains Mono"';
+  ctx.textAlign = 'left';
+  ctx.fillText('—  COTAÇÕES DO DIA', 80, 255);
 
-    ctx.font = '28px Arial';
-    ctx.fillText('Gestão e curadoria estratégica', 340, 230);
-    ctx.fillText('sob medida para o agronegócio', 340, 268);
+  // ===== DOLAR =====
+  ctx.fillStyle = C.textLabelStrong;
+  ctx.font = '500 28px "JetBrains Mono"';
+  ctx.fillText('DÓLAR COMERCIAL', 80, 325);
 
-    // Data (corrigida — usa mês real)
+  const dolar = data.dolar;
+  // R$ pequeno: cor especial no tema verde (gold), normal no cream (green-night)
+  ctx.fillStyle = (tema === 'verde') ? C.gold : C.textNumber;
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = '300 100px "Cormorant Garamond"';
+  const baselineY = 560;
+  ctx.fillText('R$', 80, baselineY);
+  const rsW = ctx.measureText('R$').width;
+
+  ctx.fillStyle = C.textNumber;
+  ctx.font = '300 220px "Cormorant Garamond"';
+  ctx.fillText(fmtBR(dolar.price), 80 + rsW + 30, baselineY + 10);
+
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = dolar.variation >= 0 ? C.up : C.down;
+  ctx.font = '500 42px "JetBrains Mono"';
+  ctx.fillText(fmtVar(dolar.variation), 80, 615);
+  const vW = ctx.measureText(fmtVar(dolar.variation)).width;
+  ctx.fillStyle = C.textLabelStrong;
+  ctx.font = '500 26px "JetBrains Mono"';
+  ctx.fillText('no dia · fonte BCB', 80 + vW + 30, 630);
+
+  ctx.strokeStyle = C.lineStrong;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(80, 735); ctx.lineTo(W-80, 735); ctx.stroke();
+
+  // ===== COMMODITIES =====
+  const ordem = ['soja','milho','boi','algodao','cafe'];
+  let y = 790;
+  const SPACING = 180;
+  for (let i = 0; i < ordem.length; i++) {
+    const key = ordem[i];
+    const c = data[key];
+    ctx.fillStyle = C.textMain;
+    ctx.font = '500 46px "Space Grotesk"';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(NOMES[key], 80, y);
+    ctx.fillStyle = C.textLabel;
+    ctx.font = '400 26px "JetBrains Mono"';
+    ctx.fillText(c.unit, 80, y + 62);
+    ctx.fillStyle = C.textNumber;
+    ctx.font = '300 92px "Cormorant Garamond"';
     ctx.textAlign = 'right';
-    ctx.font = 'bold 36px Arial';
-    ctx.fillText(dataFormatada(), W - 80, 190);
-    ctx.textAlign = 'left';
+    ctx.fillText(`R$ ${fmtBR(c.price)}`, W-80, y);
+    ctx.fillStyle = c.variation >= 0 ? C.up : C.down;
+    ctx.font = '500 34px "JetBrains Mono"';
+    ctx.fillText(fmtVar(c.variation), W-80, y + 108);
 
-    // Cards
-    const startY    = 340;
-    const cardH     = 220;
-    const cardMargin = 16;
-    const cardLeft  = 50;
-    const cardRight = W - 50;
+    y += SPACING;
+    if (i < ordem.length - 1) {
+      ctx.strokeStyle = C.lineSoft;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(80, y - 15); ctx.lineTo(W-80, y - 15); ctx.stroke();
+    }
+  }
 
-    ordem.forEach((key, index) => {
-        const c   = data[key];
-        const top = startY + index * (cardH + cardMargin);
+  // ===== RODAPE =====
+  ctx.strokeStyle = C.gold;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(W/2 - 40, H-160); ctx.lineTo(W/2 + 40, H-160); ctx.stroke();
 
-        ctx.fillStyle = cores.cardBg;
-        ctx.fillRect(cardLeft, top, cardRight - cardLeft, cardH);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = C.textMain;
+  ctx.font = '500 30px "JetBrains Mono"';
+  ctx.fillText('kronos-ag.com', W/2, H-128);
 
-        ctx.fillStyle = stripeColors[key] || '#5C8B4F';
-        ctx.fillRect(cardLeft, top, 12, cardH);
-
-        ctx.fillStyle = cores.texto;
-        ctx.textAlign = 'left';
-        ctx.font = 'bold 48px Arial';
-        ctx.fillText(`${icons[key]}  ${labels[key]}`, cardLeft + 60, top + 70);
-
-        ctx.textAlign = 'right';
-        ctx.font = key === 'cafe' ? 'bold 62px Arial' : 'bold 70px Arial';
-        ctx.fillText(`R$ ${formatPriceBR(c.price)}`, cardRight - 50, top + 70);
-
-        ctx.textAlign = 'left';
-        ctx.font = '26px Arial';
-        ctx.fillText(`Fonte: ${c.source}`, cardLeft + 60, top + 115);
-
-        ctx.textAlign = 'right';
-        ctx.font = '26px Arial';
-        ctx.fillText(`/ ${c.unit}`, cardRight - 50, top + 115);
-
-        const arrow    = c.variation >= 0 ? '▲' : '▼';
-        const varColor = c.variation >= 0 ? '#2ecc71' : '#e74c3c';
-        ctx.fillStyle = varColor;
-        ctx.font = 'bold 34px Arial';
-        ctx.fillText(`${arrow} ${Math.abs(c.variation).toFixed(2)}%`, cardRight - 50, top + 180);
-
-        ctx.textAlign = 'left';
-    });
-
-    // Rodapé
-    ctx.fillStyle = cores.rodape;
-    ctx.font = '32px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('kronos-ag.com', W / 2, H - 140);
-    ctx.textAlign = 'left';
+  ctx.fillStyle = C.textLabelStrong;
+  ctx.font = '500 26px "JetBrains Mono"';
+  ctx.fillText('@kronosag.br', W/2, H-78);
 }
 
-// ---- Download ----
-let ultimaCorFundo = 'preto';
-
-function baixarCard(tipo) {
-    ultimaCorFundo = tipo;
-    const data = window.ultimasCotacoes || {
-        soja:    { price: 140.93, variation: -0.54, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
-        milho:   { price:  67.67, variation:  0.04, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
-        boi:     { price: 322.45, variation:  0.30, unit: '@',          source: 'CEPEA/Esalq' },
-        algodao: { price: 345.60, variation:  0.19, unit: 'cent R$/lb', source: 'CEPEA/Esalq' },
-        cafe:    { price:2181.70, variation: -2.26, unit: 'saca 60kg',  source: 'CEPEA/Esalq' },
-        dolar:   { price:   5.72, variation:  0.30, unit: 'comercial',  source: 'B3' },
-    };
-    gerarCard(data, tipo);
-    setTimeout(() => {
-        const link = document.createElement('a');
-        link.download = `kronos-card-${tipo}.png`;
-        link.href = document.getElementById('card').toDataURL('image/png');
-        link.click();
-    }, 200);
+async function gerar(novosDados = true) {
+  await document.fonts.ready;
+  if (novosDados || !DADOS_ATUAIS) {
+    DADOS_ATUAIS = await buscar();
+  }
+  desenhar(DADOS_ATUAIS, TEMA_ATIVO);
 }
+
+function baixar() {
+  const link = document.createElement('a');
+  const d = new Date();
+  const stamp = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  link.download = `kronos-boletim-${TEMA_ATIVO}-${stamp}.png`;
+  link.href = CANVAS.toDataURL('image/png');
+  link.click();
+}
+
+// === Toggle de tema ===
+document.getElementById('themeToggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const tema = btn.dataset.tema;
+  if (tema === TEMA_ATIVO) return;
+  TEMA_ATIVO = tema;
+  // Visual do toggle
+  document.querySelectorAll('#themeToggle button').forEach(b => b.classList.toggle('active', b.dataset.tema === tema));
+  // Persiste preferencia
+  try { localStorage.setItem('kronos_tema', tema); } catch(e) {}
+  // Redesenha sem buscar novamente
+  gerar(false);
+});
+
+// Recupera preferencia salva
+try {
+  const t = localStorage.getItem('kronos_tema');
+  if (t === 'verde') {
+    TEMA_ATIVO = 'verde';
+    document.querySelectorAll('#themeToggle button').forEach(b => b.classList.toggle('active', b.dataset.tema === 'verde'));
+  }
+} catch(e) {}
+
+document.getElementById('btnDownload').addEventListener('click', baixar);
+document.getElementById('btnRefresh').addEventListener('click', async () => {
+  const b = document.getElementById('btnRefresh');
+  b.disabled = true;
+  await gerar(true);
+  b.disabled = false;
+});
+
+gerar(true);
 </script>
-
 </body>
 </html>

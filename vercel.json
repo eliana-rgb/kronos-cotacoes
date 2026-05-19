@@ -1,12 +1,19 @@
 {
-  "rewrites": [
+  "version": 2,
+  "regions": ["gru1"],
+  "functions": {
+    "api/cepea-quotes.js": { "maxDuration": 15 }
+  },
+  "headers": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/$1"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/public/$1"
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, OPTIONS" }
+      ]
     }
+  ],
+  "rewrites": [
+    { "source": "/", "destination": "/index.html" }
   ]
 }
