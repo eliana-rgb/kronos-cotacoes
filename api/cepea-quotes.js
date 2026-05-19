@@ -1,22 +1,22 @@
-// api/cepea-quotes.js - Vercel Serverless Function - v7
-// Multi-fonte com diagnostico no header X-Dolar-Diag:
-//   1. AwesomeAPI (comercial real-time, br)
-//   2. BrasilAPI (comercial via PTAX BCB)
-//   3. open.er-api.com (rates do BCE)
-//   4. BCB Olinda PTAX direto
-//   5. fallback estatico
+// api/cepea-quotes.js - Vercel Serverless Function - v8
+// Mudancas v8:
+//   - BrasilAPI URL corrigida (YYYY-MM-DD)
+//   - Reordem: AwesomeAPI -> BrasilAPI -> BCB direto -> open.er-api -> fallback
+//   - Cache: stale-while-revalidate longo (1h) absorve 429s temporarios
+//   - Diagnostico marca QUALIDADE de cada fonte
+//     (live/oficial/referencia/fallback)
 
-export const config = { regions: ['gru1'] }; // forca regiao Sao Paulo
+export const config = { regions: ['gru1'] };
 
 const JSON_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (compatible; KronosAg-Cotacoes/2.0; +https://kronos-ag.com)',
-  'Accept': 'application/json',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/javascript, */*; q=0.01',
+  'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
 };
 
 const HEADERS = {
   ...JSON_HEADERS,
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-  'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
   'Referer': 'https://www.google.com/',
 };
 
@@ -26,7 +26,6 @@ function parseNumberBR(str) {
   const n = Number(cleaned);
   return isNaN(n) ? null : n;
 }
-
 function parseTabela(html) {
   const idx = html.indexOf('Fechamento:');
   if (idx === -1) return null;
@@ -45,7 +44,6 @@ function parseTabela(html) {
   if (!valor) return null;
   return { price: valor, variation: variacao ?? 0, date: tds[0] };
 }
-
 async function fetchText(url, ms = 9000, headers = HEADERS) {
   const ctrl = new AbortController();
   const id = setTimeout(() => ctrl.abort(), ms);
@@ -58,7 +56,6 @@ async function fetchText(url, ms = 9000, headers = HEADERS) {
     throw e;
   }
 }
-
 async function fetchJSON(url, ms = 7000) {
   const ctrl = new AbortController();
   const id = setTimeout(() => ctrl.abort(), ms);
@@ -99,45 +96,50 @@ async function buscarCommodity(nome) {
   return null;
 }
 
-// === 4 fontes do dolar, cada uma reporta diagnostico ===
+// === Fontes do dolar com qualidade ===
+// quality: 'live' (real-time comercial) | 'official' (PTAX BCB) | 'reference' (ECB) | 'fallback'
 
 async function fonteAwesome() {
-  const j = await fetchJSON('https://economia.awesomeapi.com.br/json/last/USD-BRL', 7000);
-  if (j.__err) return { ok:false, err:j.__err };
-  const d = j && j.USDBRL;
-  if (!d) return { ok:false, err:'no-USDBRL' };
-  const ask = Number(d.ask);
-  const pct = Number(d.pctChange);
-  if (!(ask > 0)) return { ok:false, err:'bad-ask' };
-  return { ok:true, price: ask, variation: isFinite(pct)?pct:0, source: 'AwesomeAPI' };
+  // Retry com delay de 800ms se primeiro 429
+  for (let i = 0; i < 2; i++) {
+    const j = await fetchJSON('https://economia.awesomeapi.com.br/json/last/USD-BRL', 7000);
+    if (!j.__err) {
+      const d = j && j.USDBRL;
+      if (d) {
+        const ask = Number(d.ask);
+        const pct = Number(d.pctChange);
+        if (ask > 0) return { ok:true, price: ask, variation: isFinite(pct)?pct:0, source: 'AwesomeAPI', quality: 'live' };
+      }
+      return { ok:false, err:'no-USDBRL' };
+    }
+    if (j.__err.includes('429') && i === 0) {
+      await new Promise(r => setTimeout(r, 800));
+      continue;
+    }
+    return { ok:false, err: j.__err };
+  }
+  return { ok:false, err:'retry-exhausted' };
 }
 
 async function fonteBrasilAPI() {
-  // BrasilAPI tem cotacao comercial via PTAX BCB - super estavel, no Brasil
+  // CORRIGIDO v8: formato YYYY-MM-DD
   const hoje = new Date();
   for (let i = 0; i < 7; i++) {
     const d = new Date(hoje); d.setDate(d.getDate()-i);
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth()+1).padStart(2,'0');
     const dd = String(d.getDate()).padStart(2,'0');
-    const dataStr = `${yyyy}${mm}${dd}`;
+    const dataStr = `${yyyy}-${mm}-${dd}`; // FIX: era YYYYMMDD, BrasilAPI espera YYYY-MM-DD
     const j = await fetchJSON(`https://brasilapi.com.br/api/cambio/v1/cotacao/USD/${dataStr}`, 6000);
     if (j.__err) continue;
-    const cot = j && j.cotacoes && j.cotacoes.length > 0 ? j.cotacoes[j.cotacoes.length-1] : null;
-    if (!cot) continue;
-    const venda = Number(cot.cotacao_venda);
-    if (venda > 0) return { ok:true, price: venda, variation: 0, source: 'BrasilAPI' };
+    const cots = j && j.cotacoes;
+    if (!cots || !cots.length) continue;
+    // Pegar o ultimo boletim do dia (geralmente Fechamento)
+    const ultimo = cots[cots.length-1];
+    const venda = Number(ultimo.cotacao_venda);
+    if (venda > 0) return { ok:true, price: venda, variation: 0, source: 'BrasilAPI/PTAX', quality: 'official' };
   }
   return { ok:false, err:'no-data-7d' };
-}
-
-async function fonteOpenER() {
-  // open.er-api.com - free tier sem key, base USD
-  const j = await fetchJSON('https://open.er-api.com/v6/latest/USD', 7000);
-  if (j.__err) return { ok:false, err:j.__err };
-  const brl = j && j.rates && Number(j.rates.BRL);
-  if (!(brl > 0)) return { ok:false, err:'no-BRL' };
-  return { ok:true, price: brl, variation: 0, source: 'open.er-api' };
 }
 
 async function fontePTAX() {
@@ -156,34 +158,43 @@ async function fontePTAX() {
     const items = j && j.value;
     if (items && items.length > 0) {
       const venda = Number(items[0].cotacaoVenda);
-      if (venda > 0) return { ok:true, price: venda, variation: 0, source: 'BCB/PTAX' };
+      if (venda > 0) return { ok:true, price: venda, variation: 0, source: 'BCB/PTAX', quality: 'official' };
     }
   }
   return { ok:false, err:'no-data-7d' };
 }
 
+async function fonteOpenER() {
+  const j = await fetchJSON('https://open.er-api.com/v6/latest/USD', 7000);
+  if (j.__err) return { ok:false, err: j.__err };
+  const brl = j && j.rates && Number(j.rates.BRL);
+  if (!(brl > 0)) return { ok:false, err:'no-BRL' };
+  return { ok:true, price: brl, variation: 0, source: 'open.er-api', quality: 'reference' };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // === Dolar: tentar fontes em ordem, registrando cada tentativa ===
+  // Bypass cache se ?nocache=1
+  const nocache = req.query?.nocache === '1';
+
   const diag = [];
-  let dolar = { ...FALLBACK.dolar };
+  let dolar = { ...FALLBACK.dolar, quality: 'fallback' };
 
   const fontes = [
     { nome: 'awesome',    fn: fonteAwesome },
     { nome: 'brasilapi',  fn: fonteBrasilAPI },
-    { nome: 'open-er',    fn: fonteOpenER },
     { nome: 'ptax',       fn: fontePTAX },
+    { nome: 'open-er',    fn: fonteOpenER },
   ];
   for (const { nome, fn } of fontes) {
     try {
       const r = await fn();
       if (r.ok) {
         diag.push(`${nome}:ok=${r.price.toFixed(4)}`);
-        dolar = { price: r.price, variation: r.variation, unit: 'comercial', source: r.source };
+        dolar = { price: r.price, variation: r.variation, unit: 'comercial', source: r.source, quality: r.quality };
         break;
       } else {
         diag.push(`${nome}:${r.err}`);
@@ -207,7 +218,26 @@ export default async function handler(req, res) {
     }
   });
 
+  // === Cache adaptativo baseado em qualidade ===
+  // - live (AwesomeAPI): cache 15min + SWR 1h (absorve 429s sem perder dado)
+  // - official (PTAX): cache 10min + SWR 1h
+  // - reference (ECB): cache 2min (retry logo)
+  // - fallback: cache 30s (retry quase imediato)
+  // - nocache=1: nada (forca refresh)
+  if (nocache) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  } else {
+    const cachePolicy = {
+      live:      's-maxage=900, stale-while-revalidate=3600',
+      official:  's-maxage=600, stale-while-revalidate=3600',
+      reference: 's-maxage=120, stale-while-revalidate=600',
+      fallback:  's-maxage=30, stale-while-revalidate=300',
+    };
+    res.setHeader('Cache-Control', cachePolicy[dolar.quality] || cachePolicy.fallback);
+  }
+
   res.setHeader('X-Dolar-Source', dolar.source);
+  res.setHeader('X-Dolar-Quality', dolar.quality);
   res.setHeader('X-Dolar-Diag', diag.join(' | '));
 
   return res.status(200).json({ ...dados, dolar });

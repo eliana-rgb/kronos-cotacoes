@@ -176,22 +176,29 @@ function fmtVar(v) {
 let TEMA_ATIVO = 'cream';
 let DADOS_ATUAIS = null;
 
-async function buscar() {
+const QUALIDADE = {
+  live:      { cor: '#4C7A3C', label: 'comercial em tempo real', icon: '●' },
+  official:  { cor: '#9B7917', label: 'PTAX BCB oficial (pode estar ~1-2 cent do comercial)', icon: '●' },
+  reference: { cor: '#B5602B', label: 'BCE/ECB referência (pode estar ~5-10 cent do comercial)', icon: '●' },
+  fallback:  { cor: '#9F2F2F', label: 'valor estático — todas as APIs falharam', icon: '●' },
+};
+
+async function buscar(forcarRefresh = false) {
   STATUS.textContent = 'Buscando cotações…';
   STATUS.className = 'status';
   try {
-    const r = await fetch('/api/cepea-quotes', { cache: 'no-store' });
+    const url = forcarRefresh ? '/api/cepea-quotes?nocache=1' : '/api/cepea-quotes';
+    const r = await fetch(url, { cache: 'no-store' });
     if (!r.ok) throw new Error('API falhou');
     const data = await r.json();
     const fonte = r.headers.get('X-Dolar-Source') || (data.dolar && data.dolar.source) || '—';
+    const quality = r.headers.get('X-Dolar-Quality') || (data.dolar && data.dolar.quality) || 'fallback';
     const diag = r.headers.get('X-Dolar-Diag') || '';
-    if (fonte === 'fallback') {
-      STATUS.innerHTML = `Dólar caiu pro fallback · diagnóstico:<br><span style="font-size:0.7rem;opacity:0.8">${diag}</span>`;
-      STATUS.className = 'status warn';
-    } else {
-      STATUS.innerHTML = `Atualizado · dólar via <b>${fonte}</b>` + (diag ? `<br><span style="font-size:0.65rem;opacity:0.6">${diag}</span>` : '');
-      STATUS.className = 'status ok';
-    }
+    const q = QUALIDADE[quality] || QUALIDADE.fallback;
+    STATUS.innerHTML =
+      `<div style="color:${q.cor}"><b>${q.icon} ${fonte}</b> · ${q.label}</div>` +
+      (diag ? `<div style="font-size:0.65rem;opacity:0.55;margin-top:6px;font-weight:400">${diag}</div>` : '');
+    STATUS.className = (quality === 'live' || quality === 'official') ? 'status ok' : 'status warn';
     return data;
   } catch (e) {
     STATUS.textContent = 'API indisponível · usando valores de exemplo';
@@ -325,10 +332,10 @@ function desenhar(data, tema) {
   ctx.fillText('@kronosag.br', W/2, H-78);
 }
 
-async function gerar(novosDados = true) {
+async function gerar(novosDados = true, forcarRefresh = false) {
   await document.fonts.ready;
   if (novosDados || !DADOS_ATUAIS) {
-    DADOS_ATUAIS = await buscar();
+    DADOS_ATUAIS = await buscar(forcarRefresh);
   }
   desenhar(DADOS_ATUAIS, TEMA_ATIVO);
 }
@@ -370,7 +377,9 @@ document.getElementById('btnDownload').addEventListener('click', baixar);
 document.getElementById('btnRefresh').addEventListener('click', async () => {
   const b = document.getElementById('btnRefresh');
   b.disabled = true;
-  await gerar(true);
+  b.textContent = '↻ Forçando atualização…';
+  await gerar(true, true);  // forcarRefresh=true bypassa cache do Vercel
+  b.textContent = '↻ Atualizar cotações';
   b.disabled = false;
 });
 
