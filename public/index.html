@@ -223,47 +223,52 @@ function desenhar(data, tema) {
   ctx.fillStyle = C.bg;
   ctx.fillRect(0,0,W,H);
 
-  // ===== TOPO =====
+  // ===== TOPO ===== Fontes bumpadas pra publico 50+
+  // KRONOS 56px
   ctx.fillStyle = C.textMain;
-  ctx.font = '500 44px "Space Grotesk"';
+  ctx.font = '500 56px "Space Grotesk"';
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   ctx.fillText('KRONOS', 80, 80);
 
+  // Slogan em 2 linhas grandes (28px Mono Medium)
   ctx.fillStyle = C.textLabel;
-  ctx.font = '500 20px "JetBrains Mono"';
-  ctx.fillText('ENGENHARIA FINANCEIRA PARA O AGRONEGÓCIO', 80, 138);
+  ctx.font = '500 28px "JetBrains Mono"';
+  ctx.fillText('ENGENHARIA FINANCEIRA', 80, 154);
+  ctx.fillText('PARA O AGRONEGÓCIO', 80, 192);
 
+  // Data direita 36px
   ctx.fillStyle = C.textMain;
-  ctx.font = '500 30px "JetBrains Mono"';
+  ctx.font = '500 36px "JetBrains Mono"';
   ctx.textAlign = 'right';
   ctx.fillText(dataFormatada(), W-80, 80);
 
+  // BOLETIM Nº 26px
   ctx.fillStyle = C.textLabel;
-  ctx.font = '400 22px "JetBrains Mono"';
-  ctx.fillText(`BOLETIM Nº ${numeroBoletim()}`, W-80, 138);
+  ctx.font = '500 26px "JetBrains Mono"';
+  ctx.fillText(`BOLETIM Nº ${numeroBoletim()}`, W-80, 132);
 
+  // Separator
   ctx.strokeStyle = C.lineStrong;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(80, 200); ctx.lineTo(W-80, 200); ctx.stroke();
+  ctx.moveTo(80, 250); ctx.lineTo(W-80, 250); ctx.stroke();
 
-  // Eyebrow
+  // Eyebrow 36px
   ctx.fillStyle = C.accent;
-  ctx.font = '500 30px "JetBrains Mono"';
+  ctx.font = '500 36px "JetBrains Mono"';
   ctx.textAlign = 'left';
-  ctx.fillText('—  COTAÇÕES DO DIA', 80, 255);
+  ctx.fillText('—  COTAÇÕES DO DIA', 80, 305);
 
   // ===== DOLAR =====
   ctx.fillStyle = C.textLabelStrong;
-  ctx.font = '500 28px "JetBrains Mono"';
-  ctx.fillText('DÓLAR COMERCIAL', 80, 325);
+  ctx.font = '500 34px "JetBrains Mono"';
+  ctx.fillText('DÓLAR COMERCIAL', 80, 385);
 
   const dolar = data.dolar;
-  // R$ pequeno: cor especial no tema verde (gold), normal no cream (green-night)
   ctx.fillStyle = (tema === 'verde') ? C.gold : C.textNumber;
   ctx.textBaseline = 'alphabetic';
   ctx.font = '300 100px "Cormorant Garamond"';
-  const baselineY = 560;
+  const baselineY = 605;
   ctx.fillText('R$', 80, baselineY);
   const rsW = ctx.measureText('R$').width;
 
@@ -271,41 +276,46 @@ function desenhar(data, tema) {
   ctx.font = '300 220px "Cormorant Garamond"';
   ctx.fillText(fmtBR(dolar.price), 80 + rsW + 30, baselineY + 10);
 
+  // Variação grande + fonte BCB grande
   ctx.textBaseline = 'top';
   ctx.fillStyle = dolar.variation >= 0 ? C.up : C.down;
-  ctx.font = '500 42px "JetBrains Mono"';
-  ctx.fillText(fmtVar(dolar.variation), 80, 615);
+  ctx.font = '500 46px "JetBrains Mono"';
+  ctx.fillText(fmtVar(dolar.variation), 80, 670);
   const vW = ctx.measureText(fmtVar(dolar.variation)).width;
   ctx.fillStyle = C.textLabelStrong;
-  ctx.font = '500 26px "JetBrains Mono"';
-  ctx.fillText('no dia · fonte BCB', 80 + vW + 30, 630);
+  ctx.font = '500 32px "JetBrains Mono"';
+  ctx.fillText('no dia · fonte BCB', 80 + vW + 28, 685);
 
   ctx.strokeStyle = C.lineStrong;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(80, 735); ctx.lineTo(W-80, 735); ctx.stroke();
+  ctx.moveTo(80, 790); ctx.lineTo(W-80, 790); ctx.stroke();
 
   // ===== COMMODITIES =====
   const ordem = ['soja','milho','boi','algodao','cafe'];
-  let y = 790;
-  const SPACING = 180;
+  let y = 840;
+  const SPACING = 185;
   for (let i = 0; i < ordem.length; i++) {
     const key = ordem[i];
     const c = data[key];
+    // Nome 56px
     ctx.fillStyle = C.textMain;
-    ctx.font = '500 46px "Space Grotesk"';
+    ctx.font = '500 56px "Space Grotesk"';
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     ctx.fillText(NOMES[key], 80, y);
+    // Unidade + CEPEA 30px (sem "fonte" prefixo pra caber melhor)
     ctx.fillStyle = C.textLabel;
-    ctx.font = '400 26px "JetBrains Mono"';
-    ctx.fillText(c.unit + '  ·  fonte CEPEA/Esalq', 80, y + 62);
+    ctx.font = '500 30px "JetBrains Mono"';
+    ctx.fillText(c.unit + '  ·  CEPEA/Esalq', 80, y + 76);
+    // Preço 100px
     ctx.fillStyle = C.textNumber;
-    ctx.font = '300 92px "Cormorant Garamond"';
+    ctx.font = '300 100px "Cormorant Garamond"';
     ctx.textAlign = 'right';
     ctx.fillText(`R$ ${fmtBR(c.price)}`, W-80, y);
+    // Variação 40px
     ctx.fillStyle = c.variation >= 0 ? C.up : C.down;
-    ctx.font = '500 34px "JetBrains Mono"';
-    ctx.fillText(fmtVar(c.variation), W-80, y + 108);
+    ctx.font = '500 40px "JetBrains Mono"';
+    ctx.fillText(fmtVar(c.variation), W-80, y + 118);
 
     y += SPACING;
     if (i < ordem.length - 1) {
@@ -316,20 +326,20 @@ function desenhar(data, tema) {
     }
   }
 
-  // ===== RODAPE =====
+  // ===== RODAPE 38/32 px =====
   ctx.strokeStyle = C.gold;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(W/2 - 40, H-160); ctx.lineTo(W/2 + 40, H-160); ctx.stroke();
+  ctx.moveTo(W/2 - 45, H-165); ctx.lineTo(W/2 + 45, H-165); ctx.stroke();
 
   ctx.textAlign = 'center';
   ctx.fillStyle = C.textMain;
-  ctx.font = '500 30px "JetBrains Mono"';
-  ctx.fillText('kronos-ag.com', W/2, H-128);
+  ctx.font = '500 38px "JetBrains Mono"';
+  ctx.fillText('kronos-ag.com', W/2, H-130);
 
   ctx.fillStyle = C.textLabelStrong;
-  ctx.font = '500 26px "JetBrains Mono"';
-  ctx.fillText('@kronosag.br', W/2, H-78);
+  ctx.font = '500 32px "JetBrains Mono"';
+  ctx.fillText('@kronosag.br', W/2, H-72);
 }
 
 async function gerar(novosDados = true, forcarRefresh = false) {

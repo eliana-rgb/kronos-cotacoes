@@ -1,8 +1,8 @@
 {
   "name": "kronos-cotacoes",
-  "version": "5.0.0",
+  "version": "6.0.0",
   "private": true,
-  "description": "Boletim diário KRONOS — 2 temas, 4 fontes dólar com qualidade, fonte CEPEA visível em todas commodities.",
+  "description": "Boletim diário KRONOS — fontes ampliadas para legibilidade 50+, 2 temas, fontes visíveis em cada item.",
   "scripts": { "dev": "vercel dev", "deploy": "vercel --prod" },
   "engines": { "node": ">=18" }
 }

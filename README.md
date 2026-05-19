@@ -1,76 +1,70 @@
-# KRONOS · Boletim Diário de Cotações (v5)
+# KRONOS · Boletim Diário de Cotações (v6)
 
-Sistema diário de boletim 1080×1920 para Instagram Story / WhatsApp Status,
-com identidade Kronos, 2 temas (cream + verde-noite) e fontes visíveis em todos os itens.
+Sistema diário de boletim 1080×1920 para Instagram Story / WhatsApp Status.
 
-## O que mudou nesta v5
+## Mudanças nesta v6 (LEGIBILIDADE 50+)
 
-- ✨ **Fonte CEPEA/Esalq agora aparece em cada commodity** inline com a unidade
-  (igual ao "fonte BCB" do dólar)
-- Mantém todos os recursos da v4 (4 fontes de dólar, cache adaptativo, indicador
-  de qualidade, bypass cache no botão atualizar, região gru1)
+Após feedback "as fontes e o slogan ainda não estão visíveis", todas as fontes
+foram aumentadas significativamente. Comparação:
 
-## Sobre a variação no preço do dólar
+| Elemento                | v5         | v6         | Δ      |
+|-------------------------|------------|------------|--------|
+| KRONOS marca            | 44px       | **56px**   | +27%   |
+| Slogan                  | 20px / 1 linha | **28px / 2 linhas** | +40%   |
+| Data                    | 30px       | **36px**   | +20%   |
+| BOLETIM Nº              | 22px       | **26px**   | +18%   |
+| Eyebrow                 | 30px       | **36px**   | +20%   |
+| DÓLAR COMERCIAL label   | 28px       | **34px**   | +21%   |
+| Variação dólar          | 42px       | **46px**   | +10%   |
+| "no dia · fonte BCB"    | 26px       | **32px**   | +23%   |
+| Nome commodity          | 46px       | **56px**   | +22%   |
+| Unidade + fonte         | 26px       | **30px**   | +15%   |
+| Preço commodity         | 92px       | **100px**  | +9%    |
+| Variação commodity      | 34px       | **40px**   | +18%   |
+| Footer kronos-ag.com    | 30px       | **38px**   | +27%   |
+| Footer @kronosag.br     | 26px       | **32px**   | +23%   |
 
-O dólar pode aparecer **com diferença de 1-2 centavos** do que você vê no Google
-em alguns momentos. Isso NÃO é bug. Acontece quando:
+**Slogan agora em 2 linhas**: "ENGENHARIA FINANCEIRA / PARA O AGRONEGÓCIO"
+permitiu fonte muito maior sem cortar.
 
-1. AwesomeAPI (fonte primária, comercial em tempo real) recebe HTTP 429
-   (limite de chamadas grátis estourado pelo Vercel-gru1)
-2. Sistema cai pra BrasilAPI/BCB que retornam **PTAX** (cotação oficial de fechamento)
-3. PTAX historicamente fica 1-2 centavos abaixo do comercial vivo
+## Diretriz Kronos atualizada
 
-**Como saber qual fonte está sendo usada?** Olhe o **indicador colorido**
-abaixo dos botões na página do boletim:
+O arquivo `DIRETRIZ-KRONOS-50plus.md` foi atualizado com os novos mínimos para
+qualquer trabalho visual futuro. Regra de ouro: **se está em dúvida se algo
+está pequeno, ESTÁ**.
 
-- 🟢 verde **live** = AwesomeAPI, comercial em tempo real (valor exato)
-- 🟡 amarelo **official** = PTAX BCB (pode estar 1-2 cent do comercial)
-- 🟠 laranja **reference** = BCE/ECB (pode estar 5-10 cent do comercial)
-- 🔴 vermelho **fallback** = estático, todas as APIs falharam (NÃO publique)
+## Mantém da v5
 
-**Como forçar o valor mais novo?** Clique em **↻ Atualizar cotações** — ele
-manda `?nocache=1` pra API, ignora todo cache do Vercel e tenta AwesomeAPI de novo.
+- 4 fontes de dólar com indicador de qualidade (🟢🟡🟠🔴)
+- 2 temas (cream / verde-noite) com toggle
+- Cache adaptativo por qualidade da fonte
+- Bypass de cache no botão "↻ Atualizar cotações"
+- Região São Paulo (gru1) no Vercel
+- Fonte CEPEA/Esalq visível em cada commodity
 
-## Como funciona (resumo técnico)
+## Sobre a variação ~1-2 centavos no dólar
 
-### Cadeia de fontes do dólar
-1. AwesomeAPI · live (comercial real-time, BR)
-2. BrasilAPI · official (PTAX via API brasileira)
-3. BCB Olinda · official (PTAX direto do Banco Central)
-4. open.er-api.com · reference (rates ECB)
-5. fallback estático
-
-### Cache adaptativo
-- live: 15 min + stale-while-revalidate 1h (absorve 429s sem perder valor)
-- official: 10 min + SWR 1h
-- reference: 2 min (retry pra voltar pra live logo)
-- fallback: 30 s
-- `?nocache=1` no botão atualizar: ignora todo cache
-
-### Commodities (CEPEA/Esalq)
-Scraping do site Notícias Agrícolas, parseando a tabela de fechamento de cada
-indicador (soja, milho, boi, algodão, café). Fonte exibida em cada item.
+Quando o indicador estiver 🟡 amarelo (PTAX/BrasilAPI/BCB), o valor pode estar
+1-2 centavos diferente do comercial vivo. NÃO é bug — é a PTAX oficial do
+Banco Central. Para forçar buscar a AwesomeAPI (live commercial real-time),
+clique em **↻ Atualizar cotações** que bypassa todo cache do Vercel.
 
 ## Deploy
 
-1. Descompactar zip → pasta `kronos-cotacoes/`
-2. Subir no GitHub (substituindo arquivos):
-   ```bash
-   git add . && git commit -m "deploy v5" && git push
-   ```
+1. Descompactar zip → `kronos-cotacoes/`
+2. `git add . && git commit -m "deploy v6 - fontes 50+" && git push`
 3. Vercel redeploya em ~30s
-4. Região São Paulo (`gru1`) já configurada
 
 ## Estrutura
 
 ```
 kronos-cotacoes/
-├── api/cepea-quotes.js          ← v8 (4 fontes + cache adaptativo)
-├── public/index.html            ← v7 (toggle + qualidade + fonte CEPEA)
-├── package.json                 ← 5.0.0
-├── vercel.json                  ← região gru1
+├── api/cepea-quotes.js          ← v8 (sem mudança da v5)
+├── public/index.html            ← v8 (fontes maiores)
+├── package.json                 ← 6.0.0
+├── vercel.json
 ├── .gitignore
-├── DIRETRIZ-KRONOS-50plus.md
+├── DIRETRIZ-KRONOS-50plus.md    ← atualizada com novos mínimos
 └── README.md
 ```
 
