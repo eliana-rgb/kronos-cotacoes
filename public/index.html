@@ -178,29 +178,54 @@ let DADOS_ATUAIS = null;
 
 const QUALIDADE = {
   live:      { cor: '#4C7A3C', label: 'comercial em tempo real', icon: '●' },
-  official:  { cor: '#9B7917', label: 'PTAX BCB oficial (pode estar ~1-2 cent do comercial)', icon: '●' },
-  reference: { cor: '#B5602B', label: 'BCE/ECB referência (pode estar ~5-10 cent do comercial)', icon: '●' },
+  official:  { cor: '#9B7917', label: 'PTAX BCB oficial (~1-2 cent do comercial)', icon: '●' },
+  reference: { cor: '#B5602B', label: 'BCE/ECB referência (~5-10 cent do comercial)', icon: '●' },
   fallback:  { cor: '#9F2F2F', label: 'valor estático — todas as APIs falharam', icon: '●' },
 };
+
+// === FETCH DIRETO DO NAVEGADOR ===
+// AwesomeAPI rate-limita IP do Vercel. Browser usa IP residencial -> sem 429.
+async function buscarDolarDoBrowser() {
+  try {
+    const ctrl = new AbortController();
+    const id = setTimeout(() => ctrl.abort(), 6000);
+    const r = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', {
+      cache: 'no-store',
+      signal: ctrl.signal,
+    });
+    clearTimeout(id);
+    if (!r.ok) return null;
+    const j = await r.json();
+    const d = j && j.USDBRL;
+    if (!d) return null;
+    const ask = Number(d.ask);
+    const pct = Number(d.pctChange);
+    if (ask > 0) {
+      return {
+        price: ask,
+        variation: isFinite(pct) ? pct : 0,
+        unit: 'comercial',
+        source: 'AwesomeAPI (browser)',
+        quality: 'live',
+      };
+    }
+  } catch (e) {}
+  return null;
+}
 
 async function buscar(forcarRefresh = false) {
   STATUS.textContent = 'Buscando cotações…';
   STATUS.className = 'status';
-  try {
-    const url = forcarRefresh ? '/api/cepea-quotes?nocache=1' : '/api/cepea-quotes';
-    const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) throw new Error('API falhou');
-    const data = await r.json();
-    const fonte = r.headers.get('X-Dolar-Source') || (data.dolar && data.dolar.source) || '—';
-    const quality = r.headers.get('X-Dolar-Quality') || (data.dolar && data.dolar.quality) || 'fallback';
-    const diag = r.headers.get('X-Dolar-Diag') || '';
-    const q = QUALIDADE[quality] || QUALIDADE.fallback;
-    STATUS.innerHTML =
-      `<div style="color:${q.cor}"><b>${q.icon} ${fonte}</b> · ${q.label}</div>` +
-      (diag ? `<div style="font-size:0.65rem;opacity:0.55;margin-top:6px;font-weight:400">${diag}</div>` : '');
-    STATUS.className = (quality === 'live' || quality === 'official') ? 'status ok' : 'status warn';
-    return data;
-  } catch (e) {
+
+  // Em paralelo: dolar do navegador + commodities da nossa API
+  const [dolarBrowser, apiResp] = await Promise.all([
+    buscarDolarDoBrowser(),
+    fetch(forcarRefresh ? '/api/cepea-quotes?nocache=1' : '/api/cepea-quotes', { cache: 'no-store' })
+      .then(r => r.ok ? r.json().then(d => ({ data: d, headers: r.headers })) : null)
+      .catch(() => null),
+  ]);
+
+  if (!apiResp) {
     STATUS.textContent = 'API indisponível · usando valores de exemplo';
     STATUS.className = 'status warn';
     return {
@@ -209,9 +234,29 @@ async function buscar(forcarRefresh = false) {
       boi:     { price: 322.45, variation:  0.30, unit: 'arroba' },
       algodao: { price: 345.60, variation:  0.19, unit: 'cent R$/lb' },
       cafe:    { price:2181.70, variation: -2.26, unit: 'saca 60kg' },
-      dolar:   { price:   4.99, variation: 0, unit: 'comercial' },
+      dolar:   dolarBrowser || { price: 4.99, variation: 0, unit: 'comercial' },
     };
   }
+
+  const data = apiResp.data;
+  let fonte, quality, diagExtra = '';
+  if (dolarBrowser) {
+    data.dolar = dolarBrowser;
+    fonte = 'AwesomeAPI (direto do navegador)';
+    quality = 'live';
+    const sFallback = apiResp.headers.get('X-Dolar-Source');
+    if (sFallback && sFallback !== 'fallback') diagExtra = ` · servidor tinha: ${sFallback}`;
+  } else {
+    fonte = apiResp.headers.get('X-Dolar-Source') || (data.dolar && data.dolar.source) || '—';
+    quality = apiResp.headers.get('X-Dolar-Quality') || (data.dolar && data.dolar.quality) || 'fallback';
+  }
+  const diagApi = apiResp.headers.get('X-Dolar-Diag') || '';
+  const q = QUALIDADE[quality] || QUALIDADE.fallback;
+  STATUS.innerHTML =
+    `<div style="color:${q.cor}"><b>${q.icon} ${fonte}</b> · ${q.label}</div>` +
+    ((diagApi || diagExtra) ? `<div style="font-size:0.65rem;opacity:0.55;margin-top:6px;font-weight:400">${diagApi}${diagExtra}</div>` : '');
+  STATUS.className = (quality === 'live' || quality === 'official') ? 'status ok' : 'status warn';
+  return data;
 }
 
 // === Desenho do canvas (mesma estrutura, paleta vem do tema) ===

@@ -1,8 +1,8 @@
 {
   "name": "kronos-cotacoes",
-  "version": "6.0.0",
+  "version": "7.0.0",
   "private": true,
-  "description": "Boletim diário KRONOS — fontes ampliadas para legibilidade 50+, 2 temas, fontes visíveis em cada item.",
+  "description": "Boletim diário KRONOS — dólar buscado direto do navegador (sem rate limit Vercel).",
   "scripts": { "dev": "vercel dev", "deploy": "vercel --prod" },
   "engines": { "node": ">=18" }
 }
